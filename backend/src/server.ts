@@ -60,6 +60,14 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
+// Start the background queue worker in the same process for production/free hosting
+if (process.env.NODE_ENV === 'production' || process.env.RUN_WORKER_IN_PROCESS === '1') {
+  logger.info('Starting background queue worker in-process...');
+  import('./workers/analyze.worker.js')
+    .then(() => logger.info('In-process worker started successfully'))
+    .catch((err) => logger.error({ err }, 'Failed to start in-process worker'));
+}
+
 app.listen(PORT, () => {
   console.log(`🚀 FoodNet Standalone Backend listening on port ${PORT}`);
 });
