@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "postinstall": "prisma generate",
     "start": "node dist/server.js",
     "worker": "tsx watch src/workers/analyze.worker.ts",
     "worker:prod": "node dist/workers/analyze.worker.js",
