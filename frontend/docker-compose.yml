@@ -1,0 +1,45 @@
+services:
+  app:
+    build: .
+    image: foodnet_app:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_OPTIONS: --dns-result-order=ipv4first
+    ports:
+      - "3000:3000"
+    depends_on:
+      - redis
+      - ollama
+
+  worker:
+    build: .
+    image: foodnet_app:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_OPTIONS: --dns-result-order=ipv4first
+    command: npm run worker
+    depends_on:
+      - redis
+      - ollama
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+
+volumes:
+  ollama-data:

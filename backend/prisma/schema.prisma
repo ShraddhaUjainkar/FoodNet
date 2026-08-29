@@ -1,0 +1,98 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Test {
+  id        String   @id @default(cuid())
+  message   String
+  createdAt DateTime @default(now())
+}
+
+model Scan {
+  id                  String   @id @default(cuid())
+  imageUrl            String?
+  score               Int?
+  grade               String?
+  summary             String?
+
+  ingredients         Json?
+  additives           Json?
+  allergens           Json?
+  alternatives        Json?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model Ingredient {
+  id                  String            @id @default(cuid())
+  name                String            @unique
+  normalizedName      String            @unique
+  category            String?
+  description         String?
+  commonUses          String?
+  concernLevel        String?
+  evidenceLevel       String?
+  consumptionGuidance String?
+
+  aliases             IngredientAlias[]
+  documents           IngredientDocument[]
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+}
+
+model IngredientAlias {
+  id           String     @id @default(cuid())
+  alias        String     @unique
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime   @default(now())
+}
+
+model Additive {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  category    String?
+  concernLevel String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model IngredientDocument {
+  id           String     @id @default(cuid())
+  ingredientId String
+  title        String
+  content      String
+  source       String?
+  evidenceLevel String?
+
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  eventType String
+  targetKey String?
+  scanId    String?
+  userId    String?
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([eventType])
+  @@index([scanId])
+}
