@@ -117,7 +117,7 @@ export default function Home() {
       }, t);
     });
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000").replace(/\/$/, "");
     const startMs = Date.now();
     const delay = (ms: number) =>
       new Promise((resolve) => setTimeout(resolve, ms));
@@ -257,7 +257,7 @@ export default function Home() {
       }, t);
     });
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000").replace(/\/$/, "");
     const delay = (ms: number) =>
       new Promise((resolve) => setTimeout(resolve, ms));
     const minUXPromise = delay(3500);

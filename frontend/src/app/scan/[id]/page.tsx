@@ -107,7 +107,9 @@ export default function ScanResultPage() {
 
   // Fetch report data on mount (polls status API for job resolution)
   useEffect(() => {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const API_URL = (
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+    ).replace(/\/$/, "");
     let intervalId: NodeJS.Timeout;
 
     async function checkStatus() {
