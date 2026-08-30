@@ -145,6 +145,35 @@ export const scanRepository = {
     }
   },
 
+  getAllScans: async (limit: number = 20): Promise<ScanRecord[]> => {
+    try {
+      const scans = await prisma.scan.findMany({
+        orderBy: { createdAt: "desc" },
+        take: limit,
+      });
+
+      return scans.map((p) => ({
+        id: p.id,
+        name: p.id,
+        brand: "",
+        score: p.score ?? 0,
+        grade: (p.grade as any) || "C",
+        summary: p.summary || "",
+        allergens: (p.allergens as any) || [],
+        ingredients: (p.ingredients as any) || [],
+        additives: (p.additives as any) || [],
+        nutrition: [],
+        alternatives: (p.alternatives as any) || [],
+        emoji: "",
+        gradient: "",
+        image: p.imageUrl || undefined,
+      }));
+    } catch (e) {
+      logger.error({ err: e }, "Failed to fetch all scans from database");
+      return [];
+    }
+  },
+
   createAuditLog: async (params: {
     eventType: string;
     targetKey?: string | null;

@@ -24,3 +24,14 @@ export async function getScanController(req: Request, res: Response, next: NextF
     next(error);
   }
 }
+
+export async function getAllScansController(req: Request, res: Response, next: NextFunction) {
+  try {
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 20;
+    const scans = await scanRepository.getAllScans(limit);
+    res.status(200).json(scans);
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to fetch scans history');
+    next(error);
+  }
+}
