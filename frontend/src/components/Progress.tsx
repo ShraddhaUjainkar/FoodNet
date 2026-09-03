@@ -158,33 +158,9 @@ export default function AnalysisProgressOverlay({
   }
 
   return (
-    <div
-      className="
-        fixed inset-0 z-50
-        flex items-center justify-center
-        bg-[#211817]/25
-        px-4
-        backdrop-blur-[5px]
-        animate-in fade-in duration-300
-      "
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#211817]/25 px-4 backdrop-blur-[5px] animate-in fade-in duration-300">
       {/* Glass Card */}
-      <div
-        className="
-          w-full max-w-[544px]
-          overflow-hidden
-          rounded-[14px]
-          border border-[#FFE0D8]
-          bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(255,248,246,0.97)_48%,rgba(255,236,230,0.95)_100%)]
-          px-7 py-7
-          shadow-[0_24px_80px_rgba(255,75,63,0.18),0_18px_54px_rgba(15,23,42,0.16)]
-          backdrop-blur-xl
-          animate-in
-          zoom-in-[0.97]
-          fade-in
-          duration-300
-        "
-      >
+      <div className="w-full max-w-[544px] overflow-hidden rounded-[14px] border border-[#FFE0D8] bg-[linear-gradient(135deg,rgba(255,255,255,0.98)_0%,rgba(255,248,246,0.97)_48%,rgba(255,236,230,0.95)_100%)] px-7 py-7 shadow-[0_24px_80px_rgba(255,75,63,0.18),0_18px_54px_rgba(15,23,42,0.16)] backdrop-blur-xl animate-in zoom-in-[0.97] fade-in duration-300">
         {/* Header */}
         <div className="mb-7 flex items-start gap-4">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFE9E4] text-[#FF3B30] shadow-[0_8px_20px_rgba(255,75,63,0.16)]">
@@ -192,14 +168,7 @@ export default function AnalysisProgressOverlay({
           </div>
 
           <div className="min-w-0 flex-1 pt-0.5">
-            <h2
-              className="
-                text-[18px]
-                font-bold
-                leading-tight
-                text-[#171717]
-              "
-            >
+            <h2 className="text-[18px] font-bold leading-tight text-[#171717]">
               Analyzing your food label
             </h2>
 
@@ -268,54 +237,22 @@ export default function AnalysisProgressOverlay({
 
                 {/* Status Circle */}
                 <div
-                  className={`
-                    relative z-10
-                    flex h-[27px] w-[27px]
-                    shrink-0
-                    items-center justify-center
-                    rounded-full
-                    border
-                    transition-all
-                    duration-500
-                    ${
-                      failed
-                        ? `
-                          border-[#FF4B3F]
-                          bg-[#FF4B3F]
-                          text-white
-                        `
-                        : completed
-                          ? `
-                            border-[#FF4B3F]
-                            bg-[#FF4B3F]
-                            text-white
-                          `
-                          : active
-                            ? `
-                              border-[#FFD8D2]
-                              bg-[#FFE6E2]
-                              shadow-[0_0_0_8px_rgba(255,75,63,0.12)]
-                            `
-                            : `
-                              border-[#D2D6DD]
-                              bg-[#FFF8F6]
-                            `
-                    }
-                  `}
+                  className={`relative z-10 flex h-[27px] w-[27px] shrink-0 items-center justify-center rounded-full border transition-all duration-500 ${
+                    failed
+                      ? "border-[#FF4B3F] bg-[#FF4B3F] text-white"
+                      : completed
+                        ? "border-[#FF4B3F] bg-[#FF4B3F] text-white"
+                        : active
+                          ? "border-[#FFD8D2] bg-[#FFE6E2] shadow-[0_0_0_8px_rgba(255,75,63,0.12)]"
+                          : "border-[#D2D6DD] bg-[#FFF8F6]"
+                  }`}
                 >
                   {failed ? (
                     <span className="text-[11px] font-bold">✕</span>
                   ) : completed ? (
                     <Check size={14} strokeWidth={3} />
                   ) : active ? (
-                    <span
-                      className="
-                        h-[10px] w-[10px]
-                        rounded-full
-                        bg-[#FF4B3F]
-                        animate-pulse
-                      "
-                    />
+                    <span className="h-[10px] w-[10px] rounded-full bg-[#FF4B3F] animate-pulse" />
                   ) : (
                     <span className="h-[5px] w-[5px] rounded-full bg-[#D4D4D4]" />
                   )}
@@ -324,16 +261,7 @@ export default function AnalysisProgressOverlay({
                 {/* Content */}
                 <div className="min-w-0 flex-1 pb-[19px]">
                   <div className="flex min-h-[27px] items-center gap-3">
-                    <p
-                      className={`
-                        text-[15px]
-                        font-bold
-                        leading-tight
-                        transition-colors
-                        duration-500
-                        text-[#171717]
-                      `}
-                    >
+                    <p className="text-[15px] font-bold leading-tight transition-colors duration-500 text-[#171717]">
                       {step.title}
                     </p>
 
@@ -345,15 +273,7 @@ export default function AnalysisProgressOverlay({
                     )}
                   </div>
 
-                  <p
-                    className={`
-                      text-[13px]
-                      leading-5
-                      transition-colors
-                      duration-500
-                      text-[#5F6368]
-                    `}
-                  >
+                  <p className="text-[13px] leading-5 transition-colors duration-500 text-[#5F6368]">
                     {step.description}
                   </p>
                 </div>
@@ -377,16 +297,7 @@ export default function AnalysisProgressOverlay({
           {/* Track */}
           <div className="h-[6px] overflow-hidden rounded-full bg-[#FFE8E2]">
             <div
-              className="
-                h-full
-                rounded-full
-                bg-gradient-to-r
-                from-[#FF3B30]
-                to-[#FF6A00]
-                transition-[width]
-                duration-700
-                ease-[cubic-bezier(0.22,1,0.36,1)]
-              "
+              className="h-full rounded-full bg-gradient-to-r from-[#FF3B30] to-[#FF6A00] transition-[width] duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
               style={{
                 width: `${progress}%`,
               }}

@@ -1,9 +1,9 @@
-import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import dotenv from 'dotenv';
-import apiRouter from './routes/api.routes.js';
-import { logger } from './config/logger.js';
+import express, { Request, Response, NextFunction } from "express";
+import cors from "cors";
+import helmet from "helmet";
+import dotenv from "dotenv";
+import apiRouter from "./routes/api.routes.js";
+import { logger } from "./config/logger.js";
 
 dotenv.config();
 
@@ -13,7 +13,9 @@ const PORT = process.env.PORT || 4000;
 // Security and routing configurations
 app.use(helmet());
 
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000').split(',');
+const allowedOrigins = (
+  process.env.ALLOWED_ORIGINS || "http://localhost:3000,http://127.0.0.1:3000"
+).split(",");
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -21,52 +23,45 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error('Not allowed by CORS'));
+        callback(new Error("Not allowed by CORS"));
       }
     },
     credentials: true,
-  })
+  }),
 );
 
-app.use(express.json({ limit: '6mb' })); // Match image size limits + metadata buffer
+app.use(express.json({ limit: "6mb" })); // Match image size limits + metadata buffer
 
 // Mount version 1 endpoints
-app.use('/api/v1', apiRouter);
+app.use("/api/v1", apiRouter);
 
 // Base health check endpoint
-app.get('/health', (_req: Request, res: Response) => {
+app.get("/health", (_req: Request, res: Response) => {
   res.status(200).json({
-    status: 'ok',
+    status: "ok",
     timestamp: new Date().toISOString(),
-    service: 'foodnet-backend',
+    service: "foodnet-backend",
   });
 });
 
 // Global Error Handler Middleware
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  logger.error({ err }, 'Unhandled request error caught');
+  logger.error({ err }, "Unhandled request error caught");
 
   const statusCode = err.status || err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
+  const message = err.message || "Internal Server Error";
 
   res.status(statusCode).json({
     success: false,
     error: {
-      code: err.code || 'INTERNAL_SERVER_ERROR',
-      message: process.env.NODE_ENV === 'production' && statusCode === 500
-        ? 'An unexpected error occurred.'
-        : message,
+      code: err.code || "INTERNAL_SERVER_ERROR",
+      message:
+        process.env.NODE_ENV === "production" && statusCode === 500
+          ? "An unexpected error occurred."
+          : message,
     },
   });
 });
-
-// Start the background queue worker in the same process for production/free hosting
-if (process.env.NODE_ENV === 'production' || process.env.RUN_WORKER_IN_PROCESS === '1') {
-  logger.info('Starting background queue worker in-process...');
-  import('./workers/analyze.worker.js')
-    .then(() => logger.info('In-process worker started successfully'))
-    .catch((err) => logger.error({ err }, 'Failed to start in-process worker'));
-}
 
 app.listen(PORT, () => {
   console.log(`🚀 FoodNet Standalone Backend listening on port ${PORT}`);

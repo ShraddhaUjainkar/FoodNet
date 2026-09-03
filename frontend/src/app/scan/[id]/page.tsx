@@ -37,6 +37,7 @@ import {
 import { ScanRecord } from "@/lib/db";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import ReloadOverlay from "@/components/Loader";
 
 function splitSummary(summary: string) {
   if (!summary) return { main: "", highlight: "" };
@@ -207,16 +208,12 @@ export default function ScanResultPage() {
   // Loading Skeleton State
   if (loading) {
     return (
-      <div className="flex-1 flex flex-col bg-zinc-50/60 font-sans text-zinc-900 justify-center items-center py-24">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <RefreshCw className="w-8 h-8 text-red-500 animate-spin" />
-          <h3 className="text-lg font-bold text-zinc-700 animate-pulse">
-            Fetching FoodNet Report...
-          </h3>
-          <p className="text-zinc-400 text-xs max-w-xs leading-normal font-medium">
-            Retrieving the chemical risk classifications and grade calculations.
-          </p>
-        </div>
+      <div className="flex-1 min-h-screen bg-zinc-50/60 flex items-center justify-center">
+        <ReloadOverlay
+          title="Fetching Report"
+          description="Retrieving chemical risk classifications and safety calculations."
+          isLoading={true}
+        />
       </div>
     );
   }
@@ -224,27 +221,15 @@ export default function ScanResultPage() {
   // Error State
   if (error || !report) {
     return (
-      <div className="flex-1 flex flex-col bg-zinc-50/60 font-sans text-zinc-900 justify-center items-center py-24">
-        <div className="flex flex-col items-center gap-4 text-center px-6">
-          <ShieldAlert className="w-16 h-16 text-red-500" />
-          <h3 className="text-xl font-black text-zinc-900">
-            Food Analysis Not Found
-          </h3>
-          <p className="text-zinc-500 text-sm max-w-sm leading-normal">
-            The scan identifier{" "}
-            <code className="bg-red-50 text-red-700 px-2 py-0.5 rounded font-mono font-bold text-xs">
-              {id}
-            </code>{" "}
-            could not be located in our databases.
-          </p>
-          <Link
-            href="/"
-            className="mt-4 bg-red-500 hover:bg-red-650 text-white font-bold py-3.5 px-6 rounded-2xl text-sm transition-all duration-300 shadow-md flex items-center gap-2 cursor-pointer active:scale-95"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Scan Label
-          </Link>
-        </div>
+      <div className="flex-1 min-h-screen bg-zinc-50/60 flex items-center justify-center">
+        <ReloadOverlay
+          title="Analysis Not Found"
+          description={`The scan identifier "${id}" could not be located in our database.`}
+          isLoading={false}
+          error={error || "Scan record not found"}
+          onRetry={() => window.location.reload()}
+          onClose={() => router.push("/")}
+        />
       </div>
     );
   }

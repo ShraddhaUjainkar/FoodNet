@@ -17,6 +17,7 @@ model Test {
 
 model Scan {
   id                  String   @id @default(cuid())
+  userId              String?
   imageUrl            String?
   score               Int?
   grade               String?
@@ -29,6 +30,8 @@ model Scan {
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model Ingredient {

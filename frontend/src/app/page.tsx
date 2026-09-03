@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import {
   UploadCloud,
   FileText,
@@ -19,9 +20,11 @@ import {
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import AnalysisProgressOverlay from "@/components/Progress";
+import { getOrCreateGuestId, migrateGuestScansIfAny } from "@/lib/guest";
 
 export default function Home() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [step, setStep] = useState<"home" | "loading">("home");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -33,6 +36,14 @@ export default function Home() {
   const [inputType, setInputType] = useState<"image" | "text">("image");
   const [pastedText, setPastedText] = useState("");
   const [progressState, setProgressState] = useState<any>(null);
+
+  // Auto-migrate guest scans to user account if user signs in
+  useEffect(() => {
+    const userId = session?.user?.id || session?.user?.email;
+    if (userId) {
+      migrateGuestScansIfAny(userId);
+    }
+  }, [session]);
 
   const handleProgressClose = () => {
     setProgressState(null);
@@ -117,16 +128,29 @@ export default function Home() {
       }, t);
     });
 
-    const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000").replace(/\/$/, "");
+    const API_URL = (
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+    ).replace(/\/$/, "");
     const startMs = Date.now();
     const delay = (ms: number) =>
       new Promise((resolve) => setTimeout(resolve, ms));
     const minUXPromise = delay(3500);
 
     try {
+      const authHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (session?.user?.id) {
+        authHeaders["x-user-id"] = session.user.id;
+      } else if (session?.user?.email) {
+        authHeaders["x-user-id"] = session.user.email;
+      } else {
+        authHeaders["x-guest-id"] = getOrCreateGuestId();
+      }
+
       const res = await fetch(`${API_URL}/api/v1/analyze`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders,
         body: JSON.stringify(
           inputType === "image"
             ? {
@@ -257,15 +281,28 @@ export default function Home() {
       }, t);
     });
 
-    const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000").replace(/\/$/, "");
+    const API_URL = (
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+    ).replace(/\/$/, "");
     const delay = (ms: number) =>
       new Promise((resolve) => setTimeout(resolve, ms));
     const minUXPromise = delay(3500);
 
     try {
+      const exampleHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (session?.user?.id) {
+        exampleHeaders["x-user-id"] = session.user.id;
+      } else if (session?.user?.email) {
+        exampleHeaders["x-user-id"] = session.user.email;
+      } else {
+        exampleHeaders["x-guest-id"] = getOrCreateGuestId();
+      }
+
       const res = await fetch(`${API_URL}/api/v1/analyze`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: exampleHeaders,
         body: JSON.stringify({
           image: "",
           filename: "example_hazelnut_cocoa_spread.png",
@@ -483,7 +520,10 @@ export default function Home() {
           </section>
 
           {/* Section: How It Works */}
-          <section className="w-full bg-white border-y border-zinc-100 py-20 px-6 md:px-12 flex flex-col items-center">
+          <section
+            id="working"
+            className="w-full bg-white border-y border-zinc-100 py-20 px-6 md:px-12 flex flex-col items-center scroll-mt-20"
+          >
             <div className="max-w-4xl w-full text-center mb-16">
               <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-red-500 bg-red-50/50 border border-red-100 px-3 py-1 rounded-full shadow-inner shadow-red-500/5">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
@@ -535,7 +575,7 @@ export default function Home() {
           </section>
 
           {/* Section: Landing Page Features Grid */}
-          <section className="w-full py-20 px-6 md:px-12 flex flex-col items-center">
+          <section id="features" className="w-full py-20 px-6 md:px-12 flex flex-col items-center scroll-mt-20">
             <div className="max-w-4xl w-full text-center mb-16">
               <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-red-500 bg-red-50/50 border border-red-100 px-3 py-1 rounded-full shadow-inner shadow-red-500/5">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
@@ -634,7 +674,7 @@ export default function Home() {
           </section>
 
           {/* Section: Interactive FAQ Accordion */}
-          <section className="w-full py-20 px-6 md:px-12 flex flex-col items-center">
+          <section id="faq" className="w-full py-20 px-6 md:px-12 flex flex-col items-center scroll-mt-20">
             <div className="max-w-4xl w-full text-center mb-16">
               <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-red-500 bg-red-50/50 border border-red-100 px-3 py-1 rounded-full shadow-inner shadow-red-500/5">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />

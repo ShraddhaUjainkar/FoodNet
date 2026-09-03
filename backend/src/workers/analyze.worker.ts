@@ -18,12 +18,13 @@ const queueName = 'analyze';
 const worker = new Worker(
   queueName,
   async (job) => {
-    const { image, imageUrl, filename, text, storageKey } = job.data as {
+    const { image, imageUrl, filename, text, storageKey, userContext } = job.data as {
       image?: string;
       imageUrl?: string;
       filename?: string;
       text?: string;
       storageKey?: string;
+      userContext?: { userId?: string; guestId?: string; isGuest: boolean };
     };
 
     try {
@@ -163,7 +164,7 @@ const worker = new Worker(
         emoji: metadata.emoji,
         gradient: metadata.gradient,
         image: imageUrl || image || storageKey || undefined,
-      });
+      }, userContext);
 
       console.log(`[Job ${job.id}] Step 6: Scan saved successfully with ID: ${scan.id}`);
       logger.info({ jobId: job.id, scanId: scan.id }, 'Job completed successfully');
