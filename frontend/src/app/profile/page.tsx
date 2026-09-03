@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import Header from "@/components/Header";
 import { getOrCreateGuestId } from "@/lib/guest";
+import { syncUserToDatabase } from "@/lib/user";
 
 const GoogleIcon = () => (
   <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -100,6 +101,9 @@ export default function ProfilePage() {
 
     if (status !== "loading") {
       fetchScans();
+      if (session?.user) {
+        syncUserToDatabase(session.user);
+      }
     }
   }, [session, status]);
 

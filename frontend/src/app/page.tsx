@@ -21,6 +21,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import AnalysisProgressOverlay from "@/components/Progress";
 import { getOrCreateGuestId, migrateGuestScansIfAny } from "@/lib/guest";
+import { syncUserToDatabase } from "@/lib/user";
 
 export default function Home() {
   const router = useRouter();
@@ -37,11 +38,14 @@ export default function Home() {
   const [pastedText, setPastedText] = useState("");
   const [progressState, setProgressState] = useState<any>(null);
 
-  // Auto-migrate guest scans to user account if user signs in
+  // Auto-migrate guest scans to user account if user signs in, and sync user to Neon
   useEffect(() => {
     const userId = session?.user?.id || session?.user?.email;
     if (userId) {
       migrateGuestScansIfAny(userId);
+    }
+    if (session?.user) {
+      syncUserToDatabase(session.user);
     }
   }, [session]);
 
