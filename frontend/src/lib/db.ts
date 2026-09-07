@@ -40,5 +40,16 @@ export interface ScanRecord {
   gradient: string;
   image?: string;
   imageKey?: string; // original Cloudinary public ID
+  evidence?: {
+    id: string;
+    title: string;
+    content: string;
+    source: string | null;
+    sourceUrl: string | null;
+    evidenceLevel: string | null;
+    category: string | null;
+    ingredientId: string | null;
+    similarity?: number;
+  }[];
 }
 export let prisma: any = null;

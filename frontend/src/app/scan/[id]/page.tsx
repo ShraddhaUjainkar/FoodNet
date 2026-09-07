@@ -33,11 +33,14 @@ import {
   ArrowRight,
   ChevronDown,
   FileQuestionMark,
+  BookOpen,
 } from "lucide-react";
 import { ScanRecord } from "@/lib/db";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import ReloadOverlay from "@/components/Loader";
+import TypewriterSummary from "@/components/TypewriterSummary";
+import ScientificEvidenceCard from "@/components/ScientificEvidenceCard";
 
 function splitSummary(summary: string) {
   if (!summary) return { main: "", highlight: "" };
@@ -99,7 +102,7 @@ export default function ScanResultPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<
-    "overview" | "ingredients" | "additives" | "nutrition" | "faq"
+    "overview" | "ingredients" | "additives" | "nutrition" | "evidence" | "faq"
   >("overview");
   const [selectedIngredient, setSelectedIngredient] = useState<
     ScanRecord["ingredients"][number] | null
@@ -151,7 +154,7 @@ export default function ScanResultPage() {
   // Color helpers
   const getGradeBadge = (grade: "A" | "B" | "C" | "D" | "E") => {
     const base =
-      "w-12 h-12 rounded-full flex items-center justify-center text-xl font-black text-white shadow-inner";
+      "w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center text-sm sm:text-base font-black text-white shadow-2xs shrink-0";
     switch (grade) {
       case "A":
         return `${base} bg-emerald-500`;
@@ -240,234 +243,222 @@ export default function ScanResultPage() {
       <Header />
 
       {/* RESULT DASHBOARD BODY */}
-      <main className="flex-1 w-full max-w-6xl mx-auto px-4 md:px-8 py-8 flex flex-col gap-6 animate-fade-in">
-        {/* Top Back Action Bar / Compact Scan Header */}
-        <div className="flex flex-wrap justify-between items-center bg-white py-4 px-6 rounded-3xl border border-zinc-100 shadow-sm gap-4">
-          <div className="flex flex-col gap-0.5 text-left">
-            <Link
-              href="/"
-              className="flex items-center gap-1 text-xs font-bold text-zinc-400 hover:text-zinc-950 transition-colors"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              Scan Another Food
-            </Link>
-            <h1 className="text-lg font-black text-zinc-955 tracking-tight mt-1">
-              {report.name}
-            </h1>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-zinc-500 bg-zinc-50 py-2 px-4 rounded-full border border-zinc-150 font-bold">
-            <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-            Analysis Complete
+      <main className="flex-1 w-full max-w-3xl mx-auto px-3.5 sm:px-6 py-5 flex flex-col gap-3.5 animate-fade-in">
+        {/* Top Minimal Action Bar */}
+        <div className="flex items-center justify-between py-0.5">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-zinc-500 hover:text-zinc-900 transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Scan Another Food</span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-zinc-400">
+              ID: {report.id}
+            </span>
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 rounded-full">
+              <CheckCircle className="w-3 h-3 text-emerald-600" />
+              Verified
+            </span>
           </div>
         </div>
 
-        {/* Product Dashboard Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* LEFT COLUMN: Summary Sidebar */}
-          <div className="lg:col-span-4 flex flex-col gap-6">
-            {/* Product Image Card */}
-            <div className="bg-white rounded-3xl border border-zinc-100 shadow-sm p-4 overflow-hidden">
-              <div className="relative aspect-square w-full bg-zinc-50 rounded-2xl border border-zinc-100 overflow-hidden flex items-center justify-center select-none group">
+        {/* UNIFIED HERO CARD: Compact, Responsive & High-Impact */}
+        <div className="bg-white rounded-2xl border border-zinc-200/80 shadow-xs p-4 sm:p-5 flex flex-col gap-3 text-left">
+          {/* Top Row: Identity + Circular Score Ring & Grade */}
+          <div className="flex items-center justify-between gap-3 sm:gap-4">
+            {/* Identity Group (Image + Brand + Title + Quick Badges) */}
+            <div className="flex items-center gap-3 sm:gap-3.5 flex-1 min-w-0">
+              {/* Responsive Image Container */}
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-zinc-50 border border-zinc-200/80 overflow-hidden shrink-0 shadow-2xs relative flex items-center justify-center">
                 {report.image ? (
                   <img
                     src={report.image}
                     alt={report.name}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    className="w-full h-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full bg-gradient-to-br from-zinc-800 to-zinc-950 flex flex-col items-center justify-center text-white p-6 gap-2">
-                    <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center border border-white/10 backdrop-blur-md shadow-inner text-red-400">
-                      <FileText className="w-6 h-6" />
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mt-1">
-                      Text Lookup Scan
-                    </span>
-                    <span className="text-[11px] text-zinc-500 font-semibold max-w-[200px] text-center leading-normal">
-                      Ingredient list analyzed via raw text pasted
-                    </span>
+                  <div className="w-full h-full bg-zinc-900 flex flex-col items-center justify-center text-zinc-400 p-1 text-center">
+                    <FileText className="w-4 h-4 text-orange-400" />
+                    <span className="text-[8px] font-bold uppercase tracking-wider text-zinc-400">Text</span>
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* Product Profile & Score Card */}
-            <div className="bg-white rounded-3xl border border-zinc-100 shadow-sm p-6 flex flex-col gap-5 text-left">
-              <div>
-                <span className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider block">
+              {/* Text Info */}
+              <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 truncate">
                   {report.brand || "Food Product"}
                 </span>
-                <h2 className="text-xl font-black text-zinc-955 tracking-tight leading-tight mt-0.5">
+                <h1 className="text-base sm:text-lg font-black text-zinc-950 tracking-tight leading-snug line-clamp-1">
                   {report.name}
-                </h2>
-              </div>
+                </h1>
 
-              {/* Visual Score Ring & Grade */}
-              <div className="flex items-center gap-6 border-y border-zinc-100 py-5">
-                {/* Gauge */}
-                <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
-                  <svg className="w-full h-full transform -rotate-90">
-                    <circle
-                      cx="40"
-                      cy="40"
-                      r="34"
-                      stroke="#f4f4f5"
-                      strokeWidth="6"
-                      fill="transparent"
-                    />
-                    <circle
-                      cx="40"
-                      cy="40"
-                      r="34"
-                      stroke={
-                        report.score >= 80
-                          ? "#22c55e"
-                          : report.score >= 60
-                            ? "#10b981"
-                            : report.score >= 40
-                              ? "#ff6a00"
-                              : "#ff3b30"
-                      }
-                      strokeWidth="6"
-                      fill="transparent"
-                      strokeDasharray={2 * Math.PI * 34}
-                      strokeDashoffset={
-                        2 * Math.PI * 34 * (1 - report.score / 100)
-                      }
-                      strokeLinecap="round"
-                      className="transition-all duration-1000 ease-out"
-                    />
-                  </svg>
-                  <div className="absolute flex flex-col items-center">
-                    <span className="text-xl font-black text-zinc-950 leading-none">
-                      {report.score}
-                    </span>
-                    <span className="text-[8px] text-zinc-400 font-bold uppercase mt-0.5">
-                      score
-                    </span>
-                  </div>
-                </div>
-
-                {/* Grade Badge */}
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-wider">
-                    Nutri-Grade
+                {/* Quick Context Badges */}
+                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                  <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-md">
+                    {report.ingredients.length} Ingredients
                   </span>
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className={getGradeBadge(report.grade)}>
-                      {report.grade}
-                    </div>
-                    <span className="text-xs font-bold text-zinc-650">
-                      {report.score >= 70
-                        ? "Good Choice"
-                        : report.score >= 40
-                          ? "Moderate Caution"
-                          : "Avoid / High Risk"}
-                    </span>
-                  </div>
+                  <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-2 py-0.5 rounded-md">
+                    {report.additives.length} Additives
+                  </span>
+                  {report.evidence && report.evidence.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("evidence")}
+                      className="text-[10px] font-bold text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200/60 px-1.5 py-0.5 rounded-md flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <BookOpen className="w-2.5 h-2.5 text-orange-600" />
+                      RAG Grounded
+                    </button>
+                  )}
                 </div>
-              </div>
-
-              {/* Split summary description */}
-              <div className="flex flex-col gap-2">
-                {(() => {
-                  const split = splitSummary(report.summary);
-                  return (
-                    <>
-                      <p className="text-zinc-500 text-xs leading-relaxed font-semibold">
-                        {split.main}
-                      </p>
-                      {split.highlight && (
-                        <p className="text-zinc-800 text-xs font-bold leading-relaxed border-l-2 border-[#FF6A00] pl-3.5 mt-1 bg-orange-50/10 py-2 rounded-r-xl">
-                          {split.highlight}
-                        </p>
-                      )}
-                    </>
-                  );
-                })()}
               </div>
             </div>
 
-            {/* Allergen Warning Widget */}
-            {report.allergens.length > 0 && (
-              <div className="bg-[#FFF1EF] rounded-3xl border border-[#FFE3E0] p-6 flex flex-col gap-3 text-left shadow-sm">
-                <div className="flex items-center gap-2 text-[#FF3B30] font-bold text-xs uppercase tracking-wider">
-                  <ShieldAlert className="w-4 h-4 text-[#FF3B30] shrink-0" />
-                  Allergen Warning
-                </div>
-                <div className="flex flex-wrap gap-2 mt-1">
-                  {report.allergens.map((allergen, idx) => (
-                    <span
-                      key={idx}
-                      className="bg-white border border-[#FFE3E0] rounded-full px-3 py-1.5 text-xs font-bold text-[#FF3B30] shadow-sm flex items-center gap-1.5"
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#FF3B30] shrink-0" />
-                      {allergen}
-                    </span>
-                  ))}
-                </div>
-                <p className="text-[11px] text-[#FF4A3D] leading-normal font-medium mt-1">
-                  Individuals with allergy conditions should exercise absolute
-                  caution. Trace cross-contamination is possible.
-                </p>
+            {/* Score & Grade Group: Visual Punch */}
+            <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
+              <div className="hidden sm:flex flex-col text-right">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">
+                  Verdict
+                </span>
+                <span className="text-xs font-bold text-zinc-850">
+                  {report.score >= 70
+                    ? "Good Choice"
+                    : report.score >= 40
+                      ? "Moderate Caution"
+                      : "Avoid"}
+                </span>
               </div>
-            )}
+
+              {/* Circular Gauge */}
+              <div className="relative w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center shrink-0">
+                <svg className="w-full h-full transform -rotate-90">
+                  <circle
+                    cx="28"
+                    cy="28"
+                    r="22"
+                    stroke="#f4f4f5"
+                    strokeWidth="4"
+                    fill="transparent"
+                  />
+                  <circle
+                    cx="28"
+                    cy="28"
+                    r="22"
+                    stroke={
+                      report.score >= 80
+                        ? "#22c55e"
+                        : report.score >= 60
+                          ? "#10b981"
+                          : report.score >= 40
+                            ? "#ff6a00"
+                            : "#ff3b30"
+                    }
+                    strokeWidth="4"
+                    fill="transparent"
+                    strokeDasharray={2 * Math.PI * 22}
+                    strokeDashoffset={
+                      2 * Math.PI * 22 * (1 - report.score / 100)
+                    }
+                    strokeLinecap="round"
+                    className="transition-all duration-700 ease-out"
+                  />
+                </svg>
+                <div className="absolute flex flex-col items-center">
+                  <span className="text-xs sm:text-sm font-black text-zinc-950 leading-none">
+                    {report.score}
+                  </span>
+                  <span className="text-[6px] text-zinc-400 font-bold uppercase">/100</span>
+                </div>
+              </div>
+
+              {/* Grade Badge */}
+              <div className={getGradeBadge(report.grade)}>
+                {report.grade}
+              </div>
+            </div>
           </div>
 
-          {/* RIGHT COLUMN: Interactive Details Dashboard */}
-          <div className="lg:col-span-8 flex flex-col gap-6">
-            {/* Tab Navigation Menu */}
-            <div className="bg-white p-1.5 rounded-2xl border border-zinc-150 shadow-sm flex flex-wrap gap-1">
-              {(
-                [
-                  { id: "overview", label: "Overview", icon: Home },
-                  { id: "ingredients", label: "Ingredients", icon: Leaf },
-                  { id: "additives", label: "Additives", icon: Beaker },
-                  { id: "nutrition", label: "Nutrition", icon: Activity },
-                  { id: "faq", label: "Product FAQ", icon: FileQuestionMark },
-                ] as const
-              ).map((tab) => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-xl text-xs md:text-sm font-bold tracking-tight transition-all duration-200 cursor-pointer ${
-                      isActive
-                        ? "bg-red-50 border border-red-100/50 text-red-800 shadow-sm"
-                        : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-800 border border-transparent"
-                    }`}
-                  >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    {tab.label}
-                  </button>
-                );
-              })}
+          {/* Allergen Strip: Only if allergens exist */}
+          {report.allergens.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 p-2 bg-red-50/80 border border-red-200/60 rounded-xl text-left">
+              <span className="text-red-700 text-xs font-bold uppercase tracking-wider flex items-center gap-1 shrink-0">
+                <ShieldAlert className="w-3.5 h-3.5 text-red-500" />
+                Allergens:
+              </span>
+              {report.allergens.map((allergen, idx) => (
+                <span
+                  key={idx}
+                  className="bg-white border border-red-200 text-red-600 text-xs font-bold px-2 py-0.5 rounded-md shadow-2xs"
+                >
+                  {allergen}
+                </span>
+              ))}
+              <span className="text-[10px] text-red-500 font-medium ml-auto hidden sm:inline">
+                Trace cross-contamination possible
+              </span>
             </div>
+          )}
 
-            {/* TAB PANEL CONTENTS */}
-            <div className="bg-white rounded-3xl border border-zinc-100 shadow-md p-6 md:p-8 min-h-[400px]">
-              {/* 1. OVERVIEW PANEL */}
-              {activeTab === "overview" && (
-                <div className="flex flex-col gap-6">
-                  {/* AI Analysis Overview Banner */}
-                  <div className="bg-gradient-to-r from-orange-50/30 to-red-50/20 rounded-2xl p-5 border border-orange-100/30 flex items-center justify-between shadow-sm">
-                    <div className="flex flex-col gap-1 text-left">
-                      <h3 className="text-base font-bold text-zinc-900 flex items-center gap-1.5">
-                        AI Analysis Overview{" "}
-                        <Sparkles className="w-4 h-4 text-amber-500 fill-amber-500 animate-pulse" />
-                      </h3>
-                      <p className="text-zinc-500 text-xs font-semibold">
-                        Comprehensive analysis of ingredients, additives,
-                        nutrition, and warnings.
-                      </p>
-                    </div>
-                    <img
-                      src="/ai_robot_avatar.png"
-                      alt="AI Robot Assistant"
-                      className="w-12 h-12 object-contain"
-                    />
-                  </div>
+          {/* AI Verdict Summary: Streamlined without oversized boxes */}
+          <div className="bg-zinc-50/70 border border-zinc-150/70 rounded-xl p-3 sm:p-3.5">
+            <TypewriterSummary summary={report.summary} />
+          </div>
+        </div>
+
+        {/* MODERN SEGMENTED CONTROL TABS */}
+        <div className="bg-zinc-100/90 p-1 rounded-xl flex items-center gap-1 overflow-x-auto scrollbar-none">
+          {(
+            [
+              { id: "overview", label: "Overview", icon: Home },
+              {
+                id: "ingredients",
+                label: `Ingredients (${report.ingredients.length})`,
+                icon: Leaf,
+              },
+              {
+                id: "additives",
+                label: `Additives (${report.additives.length})`,
+                icon: Beaker,
+              },
+              { id: "nutrition", label: "Nutrition", icon: Activity },
+              {
+                id: "evidence",
+                label:
+                  report.evidence && report.evidence.length > 0
+                    ? `Evidence (${report.evidence.length})`
+                    : "Evidence",
+                icon: BookOpen,
+              },
+              { id: "faq", label: "FAQ", icon: FileQuestionMark },
+            ] as const
+          ).map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  isActive
+                    ? "bg-white text-zinc-950 shadow-2xs"
+                    : "text-zinc-500 hover:text-zinc-800"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5 shrink-0" />
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* TAB PANEL CONTENTS */}
+        <div className="bg-white rounded-2xl border border-zinc-200/70 shadow-xs p-4 sm:p-5 min-h-[300px]">
+          {/* 1. OVERVIEW PANEL */}
+          {activeTab === "overview" && (
+            <div className="flex flex-col gap-4">
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
                     {/* Ingredient Safety Card */}
@@ -685,6 +676,14 @@ export default function ScanResultPage() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Scientific Evidence & Regulatory Citations (RAG) */}
+                  <div className="border-t border-zinc-100 pt-6">
+                    <ScientificEvidenceCard
+                      evidence={report.evidence}
+                      productName={report.name}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -817,6 +816,49 @@ export default function ScanResultPage() {
                               </p>
                             </div>
                           )}
+
+                          {/* Matched Scientific RAG Dossier */}
+                          {(() => {
+                            const matchedDoc = report.evidence?.find(
+                              (doc) =>
+                                doc.ingredientId ===
+                                  (selectedIngredient as any).id ||
+                                (selectedIngredient.name &&
+                                  doc.title
+                                    .toLowerCase()
+                                    .includes(
+                                      selectedIngredient.name.toLowerCase(),
+                                    )) ||
+                                (doc.category &&
+                                  selectedIngredient.name
+                                    .toLowerCase()
+                                    .includes(doc.category.toLowerCase())),
+                            );
+                            if (!matchedDoc) return null;
+                            return (
+                              <div className="bg-orange-50/40 border border-orange-200/70 rounded-xl p-3.5 mt-2 flex flex-col gap-1.5 text-left">
+                                <span className="text-[10px] font-black text-orange-800 uppercase tracking-wider flex items-center gap-1.5">
+                                  <BookOpen className="w-3.5 h-3.5 text-orange-600" />
+                                  Scientific Monograph (
+                                  {matchedDoc.source || "Regulatory Review"})
+                                </span>
+                                <p className="text-xs text-zinc-700 leading-relaxed font-medium">
+                                  {matchedDoc.content}
+                                </p>
+                                {matchedDoc.sourceUrl && (
+                                  <a
+                                    href={matchedDoc.sourceUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[11px] font-bold text-orange-600 hover:text-orange-700 hover:underline inline-flex items-center gap-1 mt-1"
+                                  >
+                                    View Official Publication{" "}
+                                    <ArrowRight className="w-3 h-3" />
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       ) : (
                         <div className="flex flex-col items-center justify-center text-center flex-1 py-12">
@@ -967,7 +1009,27 @@ export default function ScanResultPage() {
                 </div>
               )}
 
-              {/* 5. PRODUCT FAQ PANEL */}
+              {/* 5. DEDICATED SCIENTIFIC EVIDENCE PANEL */}
+              {activeTab === "evidence" && (
+                <div className="flex flex-col gap-6">
+                  <div>
+                    <h3 className="text-xl font-bold text-zinc-900 text-left">
+                      Scientific & Regulatory Research
+                    </h3>
+                    <p className="text-sm text-zinc-500 mt-1 text-left">
+                      Official toxicological evaluations and regulatory rulings
+                      retrieved specifically for this product.
+                    </p>
+                  </div>
+
+                  <ScientificEvidenceCard
+                    evidence={report.evidence}
+                    productName={report.name}
+                  />
+                </div>
+              )}
+
+              {/* 6. PRODUCT FAQ PANEL */}
               {activeTab === "faq" && (
                 <div className="flex flex-col gap-6">
                   <div>
@@ -1091,79 +1153,6 @@ export default function ScanResultPage() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
-
-        {/* Bottom Informational Banner */}
-        <div className="bg-emerald-50/20 border border-emerald-100 rounded-3xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-sm mt-4 select-none animate-fade-in">
-          <div className="flex flex-col gap-1 text-left">
-            <h4 className="text-sm font-black text-emerald-900 tracking-tight uppercase">
-              AI-Powered Food Analysis
-            </h4>
-            <p className="text-zinc-500 text-xs font-semibold leading-relaxed">
-              We use advanced AI to scan, analyze and provide you with accurate
-              food insights.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 w-full md:w-auto">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-100/60 flex items-center justify-center text-emerald-600 shrink-0">
-                <CheckCircle className="w-4 h-4" />
-              </div>
-              <div className="text-[10px] text-left">
-                <span className="font-bold text-zinc-800 block leading-tight">
-                  100% AI Verified
-                </span>
-                <span className="text-zinc-400 font-semibold leading-none block mt-0.5">
-                  Trusted & reliable results
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-100/60 flex items-center justify-center text-emerald-600 shrink-0">
-                <Layers className="w-4 h-4" />
-              </div>
-              <div className="text-[10px] text-left">
-                <span className="font-bold text-zinc-800 block leading-tight">
-                  Image Recognition
-                </span>
-                <span className="text-zinc-400 font-semibold leading-none block mt-0.5">
-                  Advanced OCR & Vision
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-100/60 flex items-center justify-center text-emerald-600 shrink-0">
-                <Info className="w-4 h-4" />
-              </div>
-              <div className="text-[10px] text-left">
-                <span className="font-bold text-zinc-800 block leading-tight">
-                  Ingredient Database
-                </span>
-                <span className="text-zinc-400 font-semibold leading-none block mt-0.5">
-                  10M+ Ingredients
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-emerald-100/60 flex items-center justify-center text-emerald-600 shrink-0">
-                <Activity className="w-4 h-4" />
-              </div>
-              <div className="text-[10px] text-left">
-                <span className="font-bold text-zinc-800 block leading-tight">
-                  Health Intelligence
-                </span>
-                <span className="text-zinc-400 font-semibold leading-none block mt-0.5">
-                  Evidence-based scoring
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
       </main>
 
       {/* FOOTER */}
