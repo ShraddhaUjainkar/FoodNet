@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import { runOCR } from "../services/ocr.service.js";
-import { normalizeAndMatchIngredients } from "../services/normalizer.service.js";
+import {
+  normalizeAndMatchIngredients,
+  FOOD_KEYWORDS_REGEX,
+} from "../services/normalizer.service.js";
 import {
   calculateHealthScore,
   calculateProductMetadata,
@@ -9,7 +12,7 @@ import {
 import { generateAISummary } from "../services/ai.service.js";
 import { scanRepository } from "../repositories/scan.repository.js";
 import { analyzeQueue } from "../config/redis.js";
-import { uploadImageFromDataUrl } from "../services/storage.service.js";
+import { uploadImageFromDataUrl, deleteStoredImage } from "../services/storage.service.js";
 import { logger, captureException } from "../config/logger.js";
 import { INITIAL_PROGRESS_STATE } from "../services/progress.service.js";
 
@@ -74,8 +77,10 @@ export async function analyzeController(
             : mime.split("/")[1]
         }`;
 
+      let uploadedKey: string | null = null;
       try {
         const uploaded = await uploadImageFromDataUrl(image, "foodnet/uploads");
+        uploadedKey = uploaded.key;
 
         const job = await analyzeQueue.add("image-analysis", {
           storageKey: uploaded.key,
@@ -95,6 +100,9 @@ export async function analyzeController(
         });
         return;
       } catch (error) {
+        if (uploadedKey) {
+          await deleteStoredImage(uploadedKey).catch(() => {});
+        }
         logger.error(
           { err: error },
           "Image upload or analysis job enqueue failed",
@@ -125,11 +133,43 @@ export async function analyzeController(
       );
     }
 
+    if (!rawText || rawText.trim().length < 10) {
+      res.status(422).json({
+        success: false,
+        error: {
+          code: "UNREADABLE_TEXT",
+          message: image
+            ? "We couldn't detect readable text on this image. Please ensure the label is in focus and well-lit."
+            : "Text is too short. Please enter a complete list of ingredients.",
+        },
+      });
+      return;
+    }
+
     console.log("Step 3 (Sync): Normalizing and matching ingredients...");
     const matchedIngredients = await normalizeAndMatchIngredients(rawText);
     console.log(
       `Step 3 (Sync): Normalization complete. Matched: ${matchedIngredients.length} ingredients`,
     );
+
+    const hasFoodKeywords = FOOD_KEYWORDS_REGEX.test(rawText);
+    const hasKnownIngredients = matchedIngredients.some((i) => !i.isUnmatched);
+
+    if (
+      matchedIngredients.length === 0 ||
+      (!hasKnownIngredients && !hasFoodKeywords)
+    ) {
+      res.status(422).json({
+        success: false,
+        error: {
+          code: "NO_INGREDIENTS_DETECTED",
+          message: image
+            ? "No food ingredients were detected on this image. Please take or upload a clear photo showing the 'Ingredients' list on the product packaging."
+            : "No food ingredients were detected. Please enter a valid food ingredients list.",
+        },
+      });
+      return;
+    }
 
     console.log("Step 4 (Sync): Calculating health score and grade...");
     const { score, recommendation } = calculateHealthScore(matchedIngredients);

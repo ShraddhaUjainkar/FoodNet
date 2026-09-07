@@ -1,11 +1,43 @@
 import { prisma } from "../config/database.js";
 import { getImageSignedUrl } from "../services/storage.service.js";
 import { logger } from "../config/logger.js";
-import { Redis } from "ioredis";
+import { redisConnection } from "../config/redis.js";
 
-let redis: Redis | null = null;
-if (process.env.REDIS_URL) {
-  redis = new Redis(process.env.REDIS_URL);
+// Helper functions for safe Redis operations with graceful database fallback
+async function safeGet(key: string): Promise<string | null> {
+  try {
+    return await redisConnection.get(key);
+  } catch (err) {
+    logger.warn({ err, key }, "Redis get failed, falling back to database");
+    return null;
+  }
+}
+
+async function safeSetEx(key: string, seconds: number, value: string): Promise<void> {
+  try {
+    await redisConnection.setex(key, seconds, value);
+  } catch (err) {
+    logger.warn({ err, key }, "Redis setex failed");
+  }
+}
+
+async function safeIncr(key: string): Promise<number | null> {
+  try {
+    return await redisConnection.incr(key);
+  } catch (err) {
+    logger.warn({ err, key }, "Redis incr failed");
+    return null;
+  }
+}
+
+async function safeDel(...keys: string[]): Promise<void> {
+  try {
+    if (keys.length > 0) {
+      await redisConnection.del(...keys);
+    }
+  } catch (err) {
+    logger.warn({ err, keys }, "Redis del failed");
+  }
 }
 
 export type Grade = "A" | "B" | "C" | "D" | "E";
@@ -55,6 +87,7 @@ export interface ScanRecord {
   gradient: string;
   image?: string;
   imageKey?: string; // original Cloudinary public ID
+  evidence?: any[]; // Authoritative scientific evidence retrieved via RAG
 }
 
 const globalForDb = globalThis as unknown as {
@@ -89,29 +122,37 @@ export const scanRepository = {
       // ignore storage errors
     }
 
-    // 1. If Guest: save in Redis with 7-day TTL and in PostgreSQL for 7-day retention & migration
     const targetUserId = userContext?.isGuest
       ? userContext.guestId
       : userContext?.userId || null;
 
+    // 1. Redis Cache Storage for the scan report
+    const scanTtl = userContext?.isGuest ? 604800 : 86400; // 7 days for guests, 24h for registered users
+    await safeSetEx(`scan:${id}`, scanTtl, JSON.stringify(record));
+
     if (userContext?.isGuest && userContext.guestId) {
-      if (redis) {
-        try {
-          // 7 days in seconds = 604800
-          await redis.setex(`temp_scan:${id}`, 604800, JSON.stringify(record));
+      // Backward compatibility for legacy temp_scan keys and guest counters
+      await safeSetEx(`temp_scan:${id}`, 604800, JSON.stringify(record));
 
-          const redisKey = `guest:${userContext.guestId}`;
-          await redis.incr(redisKey);
-          await redis.expire(redisKey, 604800);
-
-          logger.info(
-            { scanId: id, guestId: userContext.guestId },
-            "Guest scan saved in Redis with 7-day TTL successfully"
-          );
-        } catch (err) {
-          logger.error({ err }, "Failed to save guest scan to Redis");
-        }
+      const redisKey = `guest:${userContext.guestId}`;
+      await safeIncr(redisKey);
+      try {
+        await redisConnection.expire(redisKey, 604800);
+      } catch (err) {
+        // ignore
       }
+
+      logger.info(
+        { scanId: id, guestId: userContext.guestId },
+        "Guest scan saved in Redis with 7-day TTL successfully"
+      );
+    }
+
+    // Invalidate Vault List Cache for this user / guest in O(1)
+    if (targetUserId) {
+      await safeIncr(`vault:ver:${targetUserId}`);
+    } else {
+      await safeIncr("vault:ver:public");
     }
 
     // 2. Persist in PostgreSQL (both guest and authenticated user scans)
@@ -129,6 +170,7 @@ export const scanRepository = {
           additives: record.additives as any,
           allergens: record.allergens as any,
           alternatives: record.alternatives as any,
+          evidence: (record.evidence as any) || [],
         },
         update: {
           userId: targetUserId,
@@ -140,6 +182,7 @@ export const scanRepository = {
           additives: record.additives as any,
           allergens: record.allergens as any,
           alternatives: record.alternatives as any,
+          evidence: (record.evidence as any) || [],
         },
       });
     } catch (e) {
@@ -159,17 +202,16 @@ export const scanRepository = {
     const mem = scanDatabase.get(id);
     if (mem) return mem;
 
-    // B. Check Redis for temporary guest scans
-    if (redis) {
+    // B. Check Redis for scan report (checks primary scan:${id} and fallback temp_scan:${id})
+    const cachedScan =
+      (await safeGet(`scan:${id}`)) || (await safeGet(`temp_scan:${id}`));
+    if (cachedScan) {
       try {
-        const tempScan = await redis.get(`temp_scan:${id}`);
-        if (tempScan) {
-          const record = JSON.parse(tempScan);
-          scanDatabase.set(id, record);
-          return record;
-        }
+        const record = JSON.parse(cachedScan) as ScanRecord;
+        scanDatabase.set(id, record);
+        return record;
       } catch (e) {
-        // Fallback to database
+        // Fallback to database if cached JSON is malformed
       }
     }
 
@@ -189,11 +231,17 @@ export const scanRepository = {
         additives: (p.additives as any) || [],
         nutrition: [],
         alternatives: (p.alternatives as any) || [],
+        evidence: (p.evidence as any) || [],
         emoji: "",
         gradient: "",
         image: p.imageUrl || undefined,
       };
       scanDatabase.set(id, mapped);
+
+      // Populate Redis cache: 7 days for guests, 24 hours for registered users
+      const ttl = p.userId?.startsWith("guest_") ? 604800 : 86400;
+      await safeSetEx(`scan:${id}`, ttl, JSON.stringify(mapped));
+
       return mapped;
     } catch (e) {
       return null;
@@ -202,11 +250,34 @@ export const scanRepository = {
 
   getAllScans: async (
     limit: number = 20,
-    userId?: string | null
+    userId?: string | string[] | null
   ): Promise<any[]> => {
+    const isGuest = typeof userId === "string" && userId.startsWith("guest_");
+    const targetId = Array.isArray(userId)
+      ? [...userId].sort().join("_")
+      : (userId || "public");
+
+    // 1. Check Redis Cache for Vault list
+    const vaultVersion = (await safeGet(`vault:ver:${targetId}`)) || "0";
+    const cacheKey = `vault:${targetId}:v${vaultVersion}:${limit}`;
+
+    const cachedVault = await safeGet(cacheKey);
+    if (cachedVault) {
+      try {
+        const parsed = JSON.parse(cachedVault);
+        logger.debug(
+          { targetId, limit, count: parsed.length },
+          "Vault list served from Redis cache"
+        );
+        return parsed;
+      } catch (err) {
+        logger.warn({ err, cacheKey }, "Failed to parse cached vault list");
+      }
+    }
+
+    // 2. Fetch from PostgreSQL
     try {
       let where: any = undefined;
-      const isGuest = userId?.startsWith("guest_");
 
       if (isGuest) {
         // Scans for guests are shown for 7 days only, after that they vanish
@@ -215,6 +286,8 @@ export const scanRepository = {
           userId,
           createdAt: { gte: sevenDaysAgo },
         };
+      } else if (Array.isArray(userId)) {
+        where = { userId: { in: userId } };
       } else if (userId) {
         where = { userId };
       }
@@ -234,7 +307,7 @@ export const scanRepository = {
         },
       });
 
-      return scans.map((p) => {
+      const formattedScans = scans.map((p) => {
         const ingredients = (p.ingredients as any[]) || [];
         const avoidsCount = ingredients.filter(
           (i: any) => i.rating === "avoid"
@@ -265,6 +338,11 @@ export const scanRepository = {
           cautionsCount,
         };
       });
+
+      // 3. Populate Redis Cache (10 minute TTL = 600s)
+      await safeSetEx(cacheKey, 600, JSON.stringify(formattedScans));
+
+      return formattedScans;
     } catch (e) {
       logger.error({ err: e }, "Failed to fetch all scans from database");
       return [];
@@ -292,9 +370,11 @@ export const scanRepository = {
       });
 
       // 2. Clear Redis guest scan counter
-      if (redis) {
-        await redis.del(`guest:${guestId}`).catch(() => {});
-      }
+      await safeDel(`guest:${guestId}`);
+
+      // 3. Atomically invalidate Vault lists for both guest and target user
+      await safeIncr(`vault:ver:${guestId}`);
+      await safeIncr(`vault:ver:${userId}`);
 
       logger.info(
         { guestId, userId, migratedCount: result.count },
@@ -309,17 +389,35 @@ export const scanRepository = {
 
   deleteScan: async (id: string, requesterId?: string): Promise<boolean> => {
     try {
+      let existingUserId: string | null = null;
       if (requesterId) {
         const existing = await prisma.scan.findUnique({ where: { id } });
         if (!existing || (existing.userId && existing.userId !== requesterId)) {
           return false;
         }
+        existingUserId = existing.userId;
+      } else {
+        const existing = await prisma.scan.findUnique({
+          where: { id },
+          select: { userId: true },
+        });
+        existingUserId = existing?.userId || null;
       }
+
       await prisma.scan.delete({ where: { id } });
       scanDatabase.delete(id);
-      if (redis) {
-        await redis.del(`temp_scan:${id}`).catch(() => {});
+
+      // Clean Redis cache
+      await safeDel(`scan:${id}`, `temp_scan:${id}`);
+
+      // Invalidate Vault List Cache
+      const userToInvalidate = requesterId || existingUserId;
+      if (userToInvalidate) {
+        await safeIncr(`vault:ver:${userToInvalidate}`);
+      } else {
+        await safeIncr("vault:ver:public");
       }
+
       return true;
     } catch (e) {
       logger.error({ err: e, scanId: id }, "Failed to delete scan");

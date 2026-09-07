@@ -1,6 +1,11 @@
-import { AnalysisResult } from './analyzer.service.js';
-import { MatchedIngredient } from './normalizer.service.js';
-import { logger, captureException } from '../config/logger.js';
+import { AnalysisResult } from "./analyzer.service.js";
+import { MatchedIngredient } from "./normalizer.service.js";
+import { logger, captureException } from "../config/logger.js";
+import {
+  retrieveRelevantEvidence,
+  formatEvidenceForPrompt,
+  RetrievedEvidence,
+} from "./rag.service.js";
 
 export interface AISummaryResult {
   summary: string;
@@ -11,49 +16,50 @@ export interface AISummaryResult {
   nutrition?: {
     label: string;
     value: string;
-    rating: 'good' | 'neutral' | 'bad';
+    rating: "good" | "neutral" | "bad";
     description: string;
   }[];
   alternatives?: {
     name: string;
     brand: string;
     score: number;
-    grade: 'A' | 'B';
+    grade: "A" | "B";
     emoji: string;
     gradient: string;
   }[];
+  evidence?: RetrievedEvidence[];
 }
 
 export const ai = {
   generateSummary: async (
-    analysis: Omit<AnalysisResult, 'summary'>,
+    analysis: Omit<AnalysisResult, "summary">,
     _filename: string,
   ): Promise<string> => {
     const mapped: MatchedIngredient[] = analysis.ingredients.map((ing) => ({
       id: ing.name,
       name: ing.name,
-      rating: ing.rating as 'safe' | 'caution' | 'avoid' | 'unknown',
+      rating: ing.rating as "safe" | "caution" | "avoid" | "unknown",
       description: ing.description,
       percentage: ing.percentage,
     }));
 
     const res = await generateAISummary({
-      rawText: '',
+      rawText: "",
       ingredients: mapped,
       score: analysis.score,
       recommendation:
         analysis.score >= 70
-          ? 'Daily'
+          ? "Daily"
           : analysis.score >= 40
-            ? 'Occasionally'
-            : 'Rarely',
+            ? "Occasionally"
+            : "Rarely",
     });
 
     return res.summary;
   },
 };
 
-const ollamaSystemPrompt = `You are FoodNet AI. Return only valid JSON with this shape:
+const ollamaSystemPrompt = `You are FoodNet AI, an expert food scientist and toxicologist. Return only valid JSON with this shape:
 {
   "summary": "short plain-English summary",
   "categorizations": [{"name":"exact ingredient name","rating":"safe|caution|avoid","description":"brief explanation","consumptionGuidance":"brief guidance"}],
@@ -64,31 +70,33 @@ const ollamaSystemPrompt = `You are FoodNet AI. Return only valid JSON with this
   "nutrition": [{"label":"string","value":"string","rating":"good|neutral|bad","description":"string"}],
   "alternatives": [{"name":"string","brand":"string","score":85,"grade":"A|B","emoji":"single emoji","gradient":"from-color to-color"}]
 }
-Use only the supplied label and matched ingredient information. Do not invent medical claims. Do not override the supplied safety ratings. FoodNet's rules and database are authoritative. Explain uncertainty clearly.`;
+Ground your analysis in the authoritative scientific evidence when provided. Cite specific references (e.g. [Citation 1], EFSA, FDA, IARC) where applicable in descriptions and summary. Do not invent medical claims. Do not override the supplied safety ratings. FoodNet's rules and database are authoritative. Explain uncertainty clearly.`;
 
 async function generateOllamaSummary(params: {
   rawText: string;
   ingredients: MatchedIngredient[];
   score: number;
   recommendation: string;
+  evidencePrompt?: string;
 }): Promise<AISummaryResult | null> {
-  const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
-  const ollamaModel = process.env.OLLAMA_MODEL || 'llama3.2:3b';
+  const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434";
+  const ollamaModel = process.env.OLLAMA_MODEL || "llama3.2:3b";
 
   try {
-    const response = await fetch(`${ollamaUrl.replace(/\/$/, '')}/api/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const response = await fetch(`${ollamaUrl.replace(/\/$/, "")}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: ollamaModel,
         stream: false,
-        format: 'json',
+        format: "json",
         messages: [
-          { role: 'system', content: ollamaSystemPrompt },
+          { role: "system", content: ollamaSystemPrompt },
           {
-            role: 'user',
+            role: "user",
             content: JSON.stringify({
               rawText: params.rawText,
+              authoritativeEvidence: params.evidencePrompt || undefined,
               ingredients: params.ingredients.map((ingredient) => ({
                 name: ingredient.name,
                 rating: ingredient.rating,
@@ -104,12 +112,12 @@ async function generateOllamaSummary(params: {
     });
 
     if (!response.ok) {
-      logger.warn({ status: response.status }, 'Ollama request failed');
+      logger.warn({ status: response.status }, "Ollama request failed");
       return null;
     }
 
     const json = (await response.json()) as any;
-    const responseData = JSON.parse(json.message?.content || '{}');
+    const responseData = JSON.parse(json.message?.content || "{}");
     if (!responseData.summary) return null;
 
     for (const categorization of responseData.categorizations || []) {
@@ -125,8 +133,8 @@ async function generateOllamaSummary(params: {
       }
     }
 
-    logger.info({ model: ollamaModel }, 'Ollama summary generated');
-    console.log('AI generated summary (Ollama):', responseData.summary);
+    logger.info({ model: ollamaModel }, "Ollama summary generated");
+    console.log("AI generated summary (Ollama):", responseData.summary);
     return {
       summary: String(responseData.summary).trim(),
       productName: responseData.productName,
@@ -137,79 +145,79 @@ async function generateOllamaSummary(params: {
       alternatives: responseData.alternatives,
     };
   } catch (error) {
-    logger.warn({ err: error }, 'Ollama unavailable, using next AI fallback');
+    logger.warn({ err: error }, "Ollama unavailable, using next AI fallback");
     return null;
   }
 }
 
 function localFallbackCategorize(ingName: string): {
-  rating: 'safe' | 'caution' | 'avoid';
+  rating: "safe" | "caution" | "avoid";
   description: string;
   consumptionGuidance: string;
 } {
   const lower = ingName.toLowerCase();
 
   if (
-    lower.includes('sugar') ||
-    lower.includes('syrup') ||
-    lower.includes('hydrogenated') ||
-    lower.includes('msg') ||
-    lower.includes('monosodium glutamate') ||
-    lower.includes('artificial color')
+    lower.includes("sugar") ||
+    lower.includes("syrup") ||
+    lower.includes("hydrogenated") ||
+    lower.includes("msg") ||
+    lower.includes("monosodium glutamate") ||
+    lower.includes("artificial color")
   ) {
     return {
-      rating: 'avoid',
+      rating: "avoid",
       description:
-        'Refined sugar, flavor enhancer, or hydrogenated fat. High glycemic load or chronic health risk.',
+        "Refined sugar, flavor enhancer, or hydrogenated fat. High glycemic load or chronic health risk.",
       consumptionGuidance:
-        'Seek cleaner alternatives and avoid regular intake.',
+        "Seek cleaner alternatives and avoid regular intake.",
     };
   }
 
   if (
-    lower.includes('acid') ||
-    lower.includes('gum') ||
-    lower.includes('salt') ||
-    lower.includes('sodium') ||
-    lower.includes('starch') ||
-    lower.includes('maltodextrin') ||
-    lower.includes('flavor') ||
-    lower.includes('preservative')
+    lower.includes("acid") ||
+    lower.includes("gum") ||
+    lower.includes("salt") ||
+    lower.includes("sodium") ||
+    lower.includes("starch") ||
+    lower.includes("maltodextrin") ||
+    lower.includes("flavor") ||
+    lower.includes("preservative")
   ) {
     return {
-      rating: 'caution',
+      rating: "caution",
       description:
-        'Processed additive or sodium compound. Generally safe, but consumption should be kept moderate.',
-      consumptionGuidance: 'Consume in moderation as part of a balanced diet.',
+        "Processed additive or sodium compound. Generally safe, but consumption should be kept moderate.",
+      consumptionGuidance: "Consume in moderation as part of a balanced diet.",
     };
   }
 
   if (
-    lower.includes('water') ||
-    lower.includes('extract') ||
-    lower.includes('powder') ||
-    lower.includes('organic') ||
-    lower.includes('natural') ||
-    lower.includes('milk') ||
-    lower.includes('cocoa') ||
-    lower.includes('hazelnut') ||
-    lower.includes('potato') ||
-    lower.includes('flour') ||
-    lower.includes('oil')
+    lower.includes("water") ||
+    lower.includes("extract") ||
+    lower.includes("powder") ||
+    lower.includes("organic") ||
+    lower.includes("natural") ||
+    lower.includes("milk") ||
+    lower.includes("cocoa") ||
+    lower.includes("hazelnut") ||
+    lower.includes("potato") ||
+    lower.includes("flour") ||
+    lower.includes("oil")
   ) {
     return {
-      rating: 'safe',
+      rating: "safe",
       description:
-        'Identified as a natural or common dietary base ingredient. Deemed safe by regulatory bodies.',
-      consumptionGuidance: 'Generally safe for daily consumption.',
+        "Identified as a natural or common dietary base ingredient. Deemed safe by regulatory bodies.",
+      consumptionGuidance: "Generally safe for daily consumption.",
     };
   }
 
   return {
-    rating: 'caution',
+    rating: "caution",
     description:
-      'Common food ingredient. Recommend checking serving sizes and consuming in moderation.',
-    consumptionGuidance: 'Check standard portion sizes and consume moderately.',
+      "Common food ingredient. Recommend checking serving sizes and consuming in moderation.",
+    consumptionGuidance: "Check standard portion sizes and consume moderately.",
   };
 }
 
@@ -218,12 +226,14 @@ async function generateGeminiSummary(params: {
   ingredients: MatchedIngredient[];
   score: number;
   recommendation: string;
+  evidencePrompt?: string;
 }): Promise<AISummaryResult | null> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return null;
 
   try {
-    const systemPrompt = `You are FoodNet AI, a professional food scientist.
+    const systemPrompt = `You are FoodNet AI, a professional food scientist and toxicologist.
+Ground your analysis in the authoritative scientific evidence when provided. Cite specific references (e.g. [Citation 1], EFSA, FDA, IARC) where applicable in descriptions and summary.
 Analyze the food label and provide:
 1. A plain English summary explaining the health risks and safety profile under 3 sentences.
 2. A safety categorization for each of the unmatched ingredients listed. Each categorization must contain:
@@ -272,41 +282,46 @@ You must return your response in JSON format matching this structure:
   ]
 }`;
 
-    const userPrompt = `Raw text of the label: "${params.rawText}"
+    const userPrompt = `${params.evidencePrompt ? `=== AUTHORITATIVE SCIENTIFIC EVIDENCE ===\n${params.evidencePrompt}\n\n` : ""}Raw text of the label: "${params.rawText}"
 Matched ingredients catalog:
 ${params.ingredients
-  .filter((i) => !i.isUnmatched && i.rating !== 'unknown')
+  .filter((i) => !i.isUnmatched && i.rating !== "unknown")
   .map((i) => `${i.name} (${i.rating})`)
-  .join(', ')}
+  .join(", ")}
 Overall Safety Score: ${params.score}/100 (${params.recommendation})
 
 Unmatched ingredients to categorize:
-${params.ingredients.filter((i) => i.isUnmatched || i.rating === 'unknown').map(i => i.name).join(', ') || 'None'}`;
+${
+  params.ingredients
+    .filter((i) => i.isUnmatched || i.rating === "unknown")
+    .map((i) => i.name)
+    .join(", ") || "None"
+}`;
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     const response = await fetch(url, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
         contents: [
           {
             parts: [
               {
-                text: systemPrompt + "\n\n" + userPrompt
-              }
-            ]
-          }
+                text: systemPrompt + "\n\n" + userPrompt,
+              },
+            ],
+          },
         ],
         generationConfig: {
-          responseMimeType: "application/json"
-        }
-      })
+          responseMimeType: "application/json",
+        },
+      }),
     });
 
     if (!response.ok) {
-      logger.warn({ status: response.status }, 'Gemini API request failed');
+      logger.warn({ status: response.status }, "Gemini API request failed");
       return null;
     }
 
@@ -317,7 +332,10 @@ ${params.ingredients.filter((i) => i.isUnmatched || i.rating === 'unknown').map(
     const responseData = JSON.parse(responseText.trim());
     if (!responseData.summary) return null;
 
-    if (responseData.categorizations && Array.isArray(responseData.categorizations)) {
+    if (
+      responseData.categorizations &&
+      Array.isArray(responseData.categorizations)
+    ) {
       for (const cat of responseData.categorizations) {
         const matchedIng = params.ingredients.find(
           (i) => i.name.toLowerCase() === cat.name.toLowerCase(),
@@ -331,8 +349,8 @@ ${params.ingredients.filter((i) => i.isUnmatched || i.rating === 'unknown').map(
       }
     }
 
-    logger.info({ provider: 'gemini' }, 'Gemini summary generated');
-    console.log('AI generated summary (Gemini):', responseData.summary);
+    logger.info({ provider: "gemini" }, "Gemini summary generated");
+    console.log("AI generated summary (Gemini):", responseData.summary);
 
     return {
       summary: responseData.summary.trim(),
@@ -344,7 +362,7 @@ ${params.ingredients.filter((i) => i.isUnmatched || i.rating === 'unknown').map(
       alternatives: responseData.alternatives,
     };
   } catch (e) {
-    logger.error({ err: e }, 'Gemini API call failed');
+    logger.error({ err: e }, "Gemini API call failed");
     return null;
   }
 }
@@ -356,40 +374,93 @@ export async function generateAISummary(params: {
   recommendation: string;
 }): Promise<AISummaryResult> {
   const unmatchedIngredients = params.ingredients.filter(
-    (ing) => ing.isUnmatched || ing.rating === 'unknown',
+    (ing) => ing.isUnmatched || ing.rating === "unknown",
   );
   const unmatchedNames = unmatchedIngredients.map((ing) => ing.name);
 
+  // 0. Hybrid RAG: Retrieve authoritative scientific evidence and regulatory opinions
+  let evidence: RetrievedEvidence[] = [];
+  let evidencePrompt = '';
+
+  try {
+    const queryText =
+      params.rawText && params.rawText.trim().length > 0
+        ? params.rawText
+        : params.ingredients.map((i) => i.name).join(', ');
+
+    if (queryText.trim().length > 0) {
+      const ingredientIds = params.ingredients
+        .map((i) => i.id)
+        .filter((id): id is string => Boolean(id));
+
+      evidence = await retrieveRelevantEvidence({
+        query: queryText,
+        ingredientIds,
+        topK: 4,
+      });
+
+      if (evidence.length > 0) {
+        evidencePrompt = formatEvidenceForPrompt(evidence);
+        logger.info(
+          { retrievedCount: evidence.length },
+          'RAG scientific evidence retrieved for AI summary',
+        );
+      }
+    }
+  } catch (ragErr: any) {
+    logger.warn(
+      { err: ragErr.message },
+      'RAG retrieval encountered an issue, proceeding with standard AI evaluation',
+    );
+  }
+
   // 1. Try local Ollama if enabled
   if (process.env.ENABLE_OLLAMA === '1') {
-    const ollamaResult = await generateOllamaSummary(params);
-    if (ollamaResult) return ollamaResult;
+    const ollamaResult = await generateOllamaSummary({
+      ...params,
+      evidencePrompt,
+    });
+    if (ollamaResult) {
+      return {
+        ...ollamaResult,
+        evidence: evidence.length > 0 ? evidence : undefined,
+      };
+    }
   }
 
   // 2. Try Gemini if API key is provided
   if (process.env.GEMINI_API_KEY) {
-    const geminiResult = await generateGeminiSummary(params);
-    if (geminiResult) return geminiResult;
+    const geminiResult = await generateGeminiSummary({
+      ...params,
+      evidencePrompt,
+    });
+    if (geminiResult) {
+      return {
+        ...geminiResult,
+        evidence: evidence.length > 0 ? evidence : undefined,
+      };
+    }
   }
 
   // 3. Try OpenAI if API key is provided and remote AI is enabled
   if (process.env.OPENAI_API_KEY && process.env.ENABLE_REMOTE_AI === '1') {
     try {
       const response = await fetch(
-        'https://api.openai.com/v1/chat/completions',
+        "https://api.openai.com/v1/chat/completions",
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
           },
           body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            response_format: { type: 'json_object' },
+            model: "gpt-4o-mini",
+            response_format: { type: "json_object" },
             messages: [
               {
-                role: 'system',
-                content: `You are FoodNet AI, a professional food scientist.
+                role: "system",
+                content: `You are FoodNet AI, a professional food scientist and toxicologist.
+Ground your analysis in the authoritative scientific evidence when provided. Cite specific references (e.g. [Citation 1], EFSA, FDA, IARC) where applicable in descriptions and summary.
 Analyze the food label and provide:
 1. A plain English summary explaining the health risks and safety profile under 3 sentences.
 2. A safety categorization for each of the unmatched ingredients listed. Each categorization must contain:
@@ -439,17 +510,17 @@ You must return your response in JSON format matching this structure:
 }`,
               },
               {
-                role: 'user',
-                content: `Raw text of the label: "${params.rawText}"
+                role: "user",
+                content: `${evidencePrompt ? `=== AUTHORITATIVE SCIENTIFIC EVIDENCE ===\n${evidencePrompt}\n\n` : ''}Raw text of the label: "${params.rawText}"
 Matched ingredients catalog:
 ${params.ingredients
-  .filter((i) => !i.isUnmatched && i.rating !== 'unknown')
+  .filter((i) => !i.isUnmatched && i.rating !== "unknown")
   .map((i) => `${i.name} (${i.rating})`)
-  .join(', ')}
+  .join(", ")}
 Overall Safety Score: ${params.score}/100 (${params.recommendation})
 
 Unmatched ingredients to categorize:
-${unmatchedNames.length > 0 ? unmatchedNames.join(', ') : 'None'}`,
+${unmatchedNames.length > 0 ? unmatchedNames.join(", ") : "None"}`,
               },
             ],
             max_tokens: 600,
@@ -460,7 +531,7 @@ ${unmatchedNames.length > 0 ? unmatchedNames.join(', ') : 'None'}`,
       if (response.ok) {
         const json = (await response.json()) as any;
         const responseData = JSON.parse(
-          json.choices?.[0]?.message?.content || '{}',
+          json.choices?.[0]?.message?.content || "{}",
         );
 
         if (responseData.summary) {
@@ -480,8 +551,8 @@ ${unmatchedNames.length > 0 ? unmatchedNames.join(', ') : 'None'}`,
               }
             }
           }
-          logger.info({ provider: 'openai' }, 'AI summary generated');
-          console.log('AI generated summary (OpenAI):', responseData.summary);
+          logger.info({ provider: "openai" }, "AI summary generated");
+          console.log("AI generated summary (OpenAI):", responseData.summary);
           return {
             summary: responseData.summary.trim(),
             productName: responseData.productName,
@@ -490,24 +561,25 @@ ${unmatchedNames.length > 0 ? unmatchedNames.join(', ') : 'None'}`,
             gradient: responseData.gradient,
             nutrition: responseData.nutrition,
             alternatives: responseData.alternatives,
+            evidence: evidence.length > 0 ? evidence : undefined,
           };
         }
       }
     } catch (e) {
       logger.error(
         { err: e },
-        'OpenAI summary & categorization call failed, falling back',
+        "OpenAI summary & categorization call failed, falling back",
       );
       captureException(e);
     }
   } else {
     if (!process.env.OPENAI_API_KEY) {
       logger.info(
-        'Remote AI disabled: OPENAI_API_KEY not set — using local fallback.',
+        "Remote AI disabled: OPENAI_API_KEY not set — using local fallback.",
       );
-    } else if (process.env.ENABLE_REMOTE_AI !== '1') {
+    } else if (process.env.ENABLE_REMOTE_AI !== "1") {
       logger.info(
-        'Remote AI disabled: ENABLE_REMOTE_AI!=1 — using local fallback.',
+        "Remote AI disabled: ENABLE_REMOTE_AI!=1 — using local fallback.",
       );
     }
   }
@@ -521,20 +593,20 @@ ${unmatchedNames.length > 0 ? unmatchedNames.join(', ') : 'None'}`,
   }
 
   const avoids = params.ingredients
-    .filter((i) => i.rating === 'avoid')
+    .filter((i) => i.rating === "avoid")
     .map((i) => i.name.toLowerCase());
   const cautions = params.ingredients
-    .filter((i) => i.rating === 'caution')
+    .filter((i) => i.rating === "caution")
     .map((i) => i.name.toLowerCase());
 
-  let summaryText = '';
+  let summaryText = "";
 
   if (avoids.length > 0) {
-    summaryText += `Contains processed ingredients to avoid, notably ${avoids.slice(0, 3).join(', ')}${avoids.length > 3 ? ' and others' : ''}. `;
+    summaryText += `Contains processed ingredients to avoid, notably ${avoids.slice(0, 3).join(", ")}${avoids.length > 3 ? " and others" : ""}. `;
   }
 
   if (cautions.length > 0) {
-    summaryText += `Includes items requiring caution such as ${cautions.slice(0, 3).join(', ')}${cautions.length > 3 ? ' and others' : ''}. `;
+    summaryText += `Includes items requiring caution such as ${cautions.slice(0, 3).join(", ")}${cautions.length > 3 ? " and others" : ""}. `;
   }
 
   if (params.score < 40) {
@@ -545,8 +617,9 @@ ${unmatchedNames.length > 0 ? unmatchedNames.join(', ') : 'None'}`,
     summaryText += `Excellent safety profile. Features a highly natural composition and zero harmful chemical additives. Safe for daily dietary consumption.`;
   }
 
-  console.log('AI generated summary (local fallback):', summaryText);
+  console.log("AI generated summary (local fallback):", summaryText);
   return {
     summary: summaryText,
+    evidence: evidence.length > 0 ? evidence : undefined,
   };
 }

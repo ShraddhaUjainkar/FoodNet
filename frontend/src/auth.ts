@@ -9,9 +9,37 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
-        token.id = user.id || user.email;
+        // Sync with backend to get the stable, persistent Neon DB user ID
+        try {
+          const API_URL = (
+            process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+          ).replace(/\/$/, "");
+
+          const res = await fetch(`${API_URL}/api/v1/users/sync`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: user.email,
+              name: user.name,
+              image: user.image,
+            }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data.user?.id) {
+              token.id = data.user.id;
+              return token;
+            }
+          }
+        } catch (e) {
+          console.error("Failed to sync user in jwt callback:", e);
+        }
+
+        // Fallback to stable account providerAccountId or email
+        token.id = account?.providerAccountId || user.email || user.id;
       }
       return token;
     },

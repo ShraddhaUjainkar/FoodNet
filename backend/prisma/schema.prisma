@@ -38,6 +38,7 @@ model Scan {
   additives           Json?
   allergens           Json?
   alternatives        Json?
+  evidence            Json?
 
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -85,18 +86,26 @@ model Additive {
 }
 
 model IngredientDocument {
-  id           String     @id @default(cuid())
-  ingredientId String
-  title        String
-  content      String
-  source       String?
-  evidenceLevel String?
+  id            String      @id @default(cuid())
+  ingredientId  String?     // Made optional so general food safety studies don't need a single ingredient parent
+  title         String
+  content       String      @db.Text
+  source        String?     // e.g., "EFSA Journal 2021", "FDA 21 CFR §172"
+  sourceUrl     String?     // Clickable source URL for transparency
+  evidenceLevel String?     // e.g., "high", "moderate", "observational"
+  category      String?     // e.g., "preservative", "sweetener", "color"
+  
+  // Vector column for 768-dimensional embeddings
+  embedding     Unsupported("vector(768)")?
 
-  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  ingredient    Ingredient? @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
 
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([ingredientId])
 }
+
 
 model AuditLog {
   id        String   @id @default(cuid())

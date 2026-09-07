@@ -79,3 +79,27 @@ export async function deleteStoredImages(publicIds: string[]) {
     });
   }
 }
+
+export async function deleteStoredImage(storageKey: string): Promise<boolean> {
+  if (!storageKey) return false;
+  try {
+    let publicId = storageKey;
+    if (/^https?:\/\//i.test(storageKey)) {
+      const match = storageKey.match(/\/upload\/(?:v\d+\/)?([^\.]+)/);
+      if (match && match[1]) {
+        publicId = match[1];
+      }
+    }
+
+    const result = await cloudinary.uploader.destroy(publicId, {
+      resource_type: 'image',
+      invalidate: true,
+    });
+    logger.info({ publicId, result: result.result }, 'Purged invalid/failed scan image from Cloudinary');
+    return result.result === 'ok';
+  } catch (error) {
+    logger.warn({ err: error, storageKey }, 'Failed to delete image from Cloudinary');
+    return false;
+  }
+}
+

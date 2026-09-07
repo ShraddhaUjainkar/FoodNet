@@ -1,14 +1,18 @@
 import { Worker } from 'bullmq';
 import { redisConnection } from '../config/redis.js';
 import { runOCR } from '../services/ocr.service.js';
-import { normalizeAndMatchIngredients } from '../services/normalizer.service.js';
+import {
+  normalizeAndMatchIngredients,
+  validateExtractedText,
+  validateIngredientsMatch,
+} from '../services/normalizer.service.js';
 import {
   calculateHealthScore,
   calculateGrade,
   calculateProductMetadata,
 } from '../services/analyzer.service.js';
 import { generateAISummary } from '../services/ai.service.js';
-import { getImageSignedUrl } from '../services/storage.service.js';
+import { getImageSignedUrl, deleteStoredImage } from '../services/storage.service.js';
 import { scanRepository } from '../repositories/scan.repository.js';
 import { logger, captureException } from '../config/logger.js';
 import { updateAnalysisProgress, StepName, ProgressState } from '../services/progress.service.js';
@@ -28,15 +32,14 @@ const worker = new Worker(
     };
 
     try {
-      console.log(`[Job ${job.id}] Step 0: Worker started processing job payload.`);
-      logger.info({ jobId: job.id }, 'Worker started processing job');
-      let rawText = text || '';
+      logger.info({ jobId: job.id, filename }, 'Processing analysis job');
+      let rawText = text;
       let imageForOCR = image;
 
-      // Transition upload to ocr
+      // Update progress to OCR stage
       await updateAnalysisProgress(job, {
         currentStep: 'ocr',
-        progress: 20,
+        progress: 15,
         steps: {
           upload: 'completed',
           ocr: 'processing'
@@ -68,6 +71,9 @@ const worker = new Worker(
         console.log(`[Job ${job.id}] Step 2: Skipping OCR, using raw text payload.`);
       }
 
+      // Guardrail 1: Validate that readable text was extracted
+      validateExtractedText(rawText);
+
       // Transition ocr to identify
       await updateAnalysisProgress(job, {
         currentStep: 'identify',
@@ -81,6 +87,9 @@ const worker = new Worker(
       console.log(`[Job ${job.id}] Step 3: Normalizing and matching ingredients...`);
       const matchedIngredients = await normalizeAndMatchIngredients(rawText);
       console.log(`[Job ${job.id}] Step 3: Normalization complete. Matched: ${matchedIngredients.length} ingredients`);
+
+      // Guardrail 2: Validate that food ingredients or food keywords exist
+      validateIngredientsMatch(rawText, matchedIngredients, true);
 
       // Transition identify to health
       await updateAnalysisProgress(job, {
@@ -164,6 +173,7 @@ const worker = new Worker(
         emoji: metadata.emoji,
         gradient: metadata.gradient,
         image: imageUrl || image || storageKey || undefined,
+        evidence: aiResult.evidence,
       }, userContext);
 
       console.log(`[Job ${job.id}] Step 6: Scan saved successfully with ID: ${scan.id}`);
@@ -182,6 +192,17 @@ const worker = new Worker(
     } catch (error) {
       console.error(`[Job ${job.id}] Error occurred in background processing:`, error);
       
+      // Purge invalid/failed image from Cloudinary storage to reclaim space
+      const imageKeyToClean = storageKey || (imageUrl && /^https?:\/\//i.test(imageUrl) ? imageUrl : undefined);
+      if (imageKeyToClean) {
+        try {
+          logger.info({ jobId: job.id, imageKeyToClean }, 'Purging failed scan image from Cloudinary storage');
+          await deleteStoredImage(imageKeyToClean);
+        } catch (cleanupErr) {
+          logger.warn({ cleanupErr, imageKeyToClean }, 'Failed to purge failed scan image from storage');
+        }
+      }
+
       let failedStep: StepName = 'upload';
       let failedProgress = 0;
       

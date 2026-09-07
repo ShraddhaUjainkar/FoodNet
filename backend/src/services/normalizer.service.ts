@@ -200,3 +200,36 @@ export async function normalizeAndMatchIngredients(rawText: string): Promise<Mat
 
   return results;
 }
+
+export const FOOD_KEYWORDS_REGEX =
+  /\b(ingredients?|contains|nutrition(al)?|serving|servings|allergens?|preservatives?|calories|additives?|flavou?rs?|spices?|emulsifiers?|sweeteners?|syrup|protein|sodium|calcium|sugar|salt|oil|flour|water|milk|dairy|cocoa|starch|acid|extract|vitamins?|fat|e\s*\d{3}|ins\s*\d{3})\b/i;
+
+export function validateExtractedText(rawText: string | null | undefined): asserts rawText is string {
+  if (!rawText || rawText.trim().length < 10) {
+    throw new Error(
+      "We couldn't detect readable text on this image. Please ensure the label is in focus, well-lit, and close to the camera."
+    );
+  }
+}
+
+export function validateIngredientsMatch(
+  rawText: string,
+  matchedIngredients: MatchedIngredient[],
+  isImage: boolean = true
+): void {
+  const hasFoodKeywords = FOOD_KEYWORDS_REGEX.test(rawText);
+  const hasKnownIngredients = matchedIngredients.some((i) => !i.isUnmatched);
+
+  if (matchedIngredients.length === 0 || (!hasKnownIngredients && !hasFoodKeywords)) {
+    if (isImage) {
+      throw new Error(
+        "No food ingredients were detected on this image. Please take or upload a clear photo showing the 'Ingredients' list on the product packaging."
+      );
+    } else {
+      throw new Error(
+        "No food ingredients were detected. Please enter a valid food ingredients list."
+      );
+    }
+  }
+}
+

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import {
@@ -16,16 +16,20 @@ import {
   ChevronUp,
   Layers,
   Apple,
+  Camera,
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import AnalysisProgressOverlay from "@/components/Progress";
+import CameraCaptureModal from "@/components/CameraCaptureModal";
 import { getOrCreateGuestId, migrateGuestScansIfAny } from "@/lib/guest";
 import { syncUserToDatabase } from "@/lib/user";
 
 export default function Home() {
   const router = useRouter();
   const { data: session } = useSession();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [step, setStep] = useState<"home" | "loading">("home");
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -73,6 +77,12 @@ export default function Home() {
       setFileName(file.name);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleCameraCapture = (dataUrl: string) => {
+    setSelectedImage(dataUrl);
+    setFileName(`camera_scan_${Date.now()}.jpg`);
+    setIsCameraOpen(false);
   };
 
   // Drag and drop handlers
@@ -367,7 +377,7 @@ export default function Home() {
                       : "text-zinc-500 hover:text-zinc-800"
                   }`}
                 >
-                  Upload Label Image
+                  Image
                 </button>
                 <button
                   type="button"
@@ -378,7 +388,7 @@ export default function Home() {
                       : "text-zinc-500 hover:text-zinc-800"
                   }`}
                 >
-                  Paste Ingredients Text
+                  Text
                 </button>
               </div>
 
@@ -388,33 +398,36 @@ export default function Home() {
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
+                  onClick={() => {
+                    if (!selectedImage) fileInputRef.current?.click();
+                  }}
                   className={`border-2 border-dashed rounded-2xl p-8 md:p-10 flex flex-col items-center justify-center text-center transition-all duration-300 relative group overflow-hidden ${
                     isDragOver
                       ? "border-red-400 bg-red-50/30"
                       : selectedImage
                         ? "border-zinc-300 bg-zinc-50/50"
-                        : "border-zinc-200 bg-zinc-50/40 hover:bg-zinc-50/90"
+                        : "border-zinc-200 bg-zinc-50/40 hover:bg-zinc-50/90 cursor-pointer"
                   }`}
                 >
-                  {!selectedImage && (
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    />
-                  )}
+                  {/* Dedicated file input for device file browsing */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
 
                   {selectedImage ? (
-                    <div className="w-full flex flex-col items-center gap-4">
+                    <div
+                      className="w-full flex flex-col items-center gap-4"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {/* Image Preview Container */}
-                      <div className="relative w-36 h-36 rounded-xl overflow-hidden shadow-md border border-zinc-200 group-hover:scale-102 transition-transform duration-300 bg-zinc-200 flex items-center justify-center cursor-pointer">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileChange}
-                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                        />
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className="relative w-36 h-36 rounded-xl overflow-hidden shadow-md border border-zinc-200 group-hover:scale-102 transition-transform duration-300 bg-zinc-200 flex items-center justify-center cursor-pointer"
+                      >
                         <img
                           src={selectedImage}
                           alt="Uploaded Food Label"
@@ -431,8 +444,9 @@ export default function Home() {
                           {fileName}
                         </span>
                         <button
+                          type="button"
                           onClick={handleClearImage}
-                          className="text-xs font-medium text-red-500 hover:text-red-600 transition-colors py-1 px-3 hover:bg-red-50 rounded-full border border-transparent hover:border-red-100 flex items-center gap-1 mt-1"
+                          className="text-xs font-medium text-red-500 hover:text-red-600 transition-colors py-1 px-3 hover:bg-red-50 rounded-full border border-transparent hover:border-red-100 flex items-center gap-1 mt-1 cursor-pointer"
                         >
                           Remove file
                         </button>
@@ -450,12 +464,40 @@ export default function Home() {
                         </div>
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-zinc-800 tracking-tight group-hover:text-zinc-955 transition-colors">
-                          Drag and drop label image
+                        <h3 className="text-lg font-semibold text-zinc-800 tracking-tight group-hover:text-zinc-950 transition-colors">
+                          Upload or snap label photo
                         </h3>
                         <p className="text-zinc-400 text-xs mt-1 font-medium">
                           Supported formats: JPG, PNG, WEBP
                         </p>
+                      </div>
+
+                      {/* Primary actions: Take Photo & Browse */}
+                      <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-2.5 mt-2 z-20">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsCameraOpen(true);
+                          }}
+                          className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition-all cursor-pointer active:scale-95"
+                        >
+                          <Camera className="w-4 h-4" />
+                          Click / Snap Photo
+                        </button>
+                        <span className="text-xs text-zinc-400 font-medium">
+                          or
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            fileInputRef.current?.click();
+                          }}
+                          className="text-xs font-semibold text-zinc-700 underline hover:text-red-500 cursor-pointer transition-colors px-1 py-1"
+                        >
+                          Upload files
+                        </button>
                       </div>
                     </div>
                   )}
@@ -479,6 +521,30 @@ export default function Home() {
                 </div>
               )}
 
+              {/* Helpful switcher if user has no image */}
+              {inputType === "image" && !selectedImage && (
+                <div className="rounded-xl bg-zinc-50/80 border border-zinc-100 p-3 text-center">
+                  <p className="text-xs text-zinc-600">
+                    Don't have a label image?{" "}
+                    <button
+                      type="button"
+                      onClick={() => setInputType("text")}
+                      className="font-bold text-red-500 hover:text-red-600 underline cursor-pointer"
+                    >
+                      Paste text manually
+                    </button>{" "}
+                    {/* or{" "}
+                    <button
+                      type="button"
+                      onClick={triggerExampleAnalysis}
+                      className="font-bold text-red-500 hover:text-red-600 underline cursor-pointer"
+                    >
+                      try an example scan
+                    </button> */}
+                  </p>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="flex flex-col gap-3">
                 <button
@@ -495,13 +561,6 @@ export default function Home() {
                 >
                   <Sparkles className="w-5 h-5 shrink-0" />
                   Analyze Food
-                </button>
-
-                <button
-                  onClick={triggerExampleAnalysis}
-                  className="text-sm font-semibold text-zinc-500 hover:text-zinc-800 transition-colors border border-transparent hover:border-zinc-200 py-2.5 rounded-xl block text-center"
-                >
-                  View example analysis
                 </button>
               </div>
             </div>
@@ -579,7 +638,10 @@ export default function Home() {
           </section>
 
           {/* Section: Landing Page Features Grid */}
-          <section id="features" className="w-full py-20 px-6 md:px-12 flex flex-col items-center scroll-mt-20">
+          <section
+            id="features"
+            className="w-full py-20 px-6 md:px-12 flex flex-col items-center scroll-mt-20"
+          >
             <div className="max-w-4xl w-full text-center mb-16">
               <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-red-500 bg-red-50/50 border border-red-100 px-3 py-1 rounded-full shadow-inner shadow-red-500/5">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
@@ -678,7 +740,10 @@ export default function Home() {
           </section>
 
           {/* Section: Interactive FAQ Accordion */}
-          <section id="faq" className="w-full py-20 px-6 md:px-12 flex flex-col items-center scroll-mt-20">
+          <section
+            id="faq"
+            className="w-full py-20 px-6 md:px-12 flex flex-col items-center scroll-mt-20"
+          >
             <div className="max-w-4xl w-full text-center mb-16">
               <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-red-500 bg-red-50/50 border border-red-100 px-3 py-1 rounded-full shadow-inner shadow-red-500/5">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
@@ -772,10 +837,19 @@ export default function Home() {
       {step === "loading" && (
         <AnalysisProgressOverlay
           progressState={progressState}
+          inputType={inputType}
           onClose={handleProgressClose}
           onAnimationComplete={progressState?.onComplete}
         />
       )}
+
+      {/* CAMERA CAPTURE MODAL */}
+      <CameraCaptureModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={handleCameraCapture}
+        onFallbackToFile={() => fileInputRef.current?.click()}
+      />
 
       {/* FOOTER AREA */}
       <Footer />

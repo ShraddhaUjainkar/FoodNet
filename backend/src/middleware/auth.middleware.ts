@@ -34,9 +34,21 @@ export async function authAndLimitMiddleware(
     const userId = cookies["userId"] || (req.headers["x-user-id"] as string);
 
     if (userId) {
+      // Resolve canonical userId if email or session ID was passed
+      let canonicalUserId = userId;
+      const user = await prisma.user.findFirst({
+        where: {
+          OR: [{ id: userId }, { email: userId }],
+        },
+        select: { id: true },
+      });
+      if (user) {
+        canonicalUserId = user.id;
+      }
+
       // User path: count scans in PostgreSQL
       const userScansCount = await prisma.scan.count({
-        where: { userId },
+        where: { userId: canonicalUserId },
       });
 
       if (userScansCount >= 20) {
@@ -51,8 +63,8 @@ export async function authAndLimitMiddleware(
         return;
       }
 
-      // Attach user details to request object
-      (req as any).user = { userId, isGuest: false };
+      // Attach user details to request object with canonical ID
+      (req as any).user = { userId: canonicalUserId, isGuest: false };
       return next();
     }
 

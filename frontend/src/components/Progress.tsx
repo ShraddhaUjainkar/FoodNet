@@ -3,7 +3,7 @@
 import { Check, Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
-const steps = [
+const imageSteps = [
   {
     title: "Uploading image",
     description: "Preparing your label image",
@@ -11,6 +11,25 @@ const steps = [
   {
     title: "Reading the label",
     description: "Extracting ingredients from the image",
+  },
+  {
+    title: "Identifying ingredients",
+    description: "Matching with our database",
+  },
+  {
+    title: "Evaluating product health",
+    description: "Calculating score and warnings",
+  },
+  {
+    title: "Preparing your report",
+    description: "Generating insights and alternatives",
+  },
+];
+
+const textSteps = [
+  {
+    title: "Parsing ingredient text",
+    description: "Cleaning and tokenizing ingredients",
   },
   {
     title: "Identifying ingredients",
@@ -43,17 +62,23 @@ interface ProgressStateProp {
 
 export default function AnalysisProgressOverlay({
   progressState,
+  inputType = "image",
   onClose,
   onAnimationComplete,
 }: {
   progressState?: ProgressStateProp | null;
+  inputType?: "image" | "text";
   onClose?: () => void;
   onAnimationComplete?: () => void;
 }) {
+  const isText = inputType === "text";
+  const activeSteps = isText ? textSteps : imageSteps;
+  const totalSteps = activeSteps.length;
+
   const [renderedProgress, setRenderedProgress] = useState(0);
   const [renderedStepIndex, setRenderedStepIndex] = useState(0);
   const [lastStepUpdate, setLastStepUpdate] = useState(Date.now());
-  const MIN_STEP_DURATION = 1200; // ms per step for a premium, smooth transition
+  const MIN_STEP_DURATION = 1000; // ms per step for a premium, smooth transition
 
   const [simulatedProgress, setSimulatedProgress] = useState(0);
   const [simulatedCompletedSteps, setSimulatedCompletedSteps] = useState(0);
@@ -61,48 +86,74 @@ export default function AnalysisProgressOverlay({
   useEffect(() => {
     if (progressState && !progressState.isFallback) return;
 
-    const timers = [
-      setTimeout(() => {
-        setSimulatedProgress(20);
-        setSimulatedCompletedSteps(1);
-      }, 1400),
-      setTimeout(() => {
-        setSimulatedProgress(40);
-        setSimulatedCompletedSteps(2);
-      }, 2800),
-      setTimeout(() => {
-        setSimulatedProgress(65);
-        setSimulatedCompletedSteps(3);
-      }, 4200),
-      setTimeout(() => {
-        setSimulatedProgress(85);
-        setSimulatedCompletedSteps(4);
-      }, 5600),
-      setTimeout(() => {
-        setSimulatedProgress(100);
-        setSimulatedCompletedSteps(5);
-      }, 7000),
-    ];
-
-    return () => timers.forEach(clearTimeout);
-  }, [progressState]);
+    if (isText) {
+      const timers = [
+        setTimeout(() => {
+          setSimulatedProgress(25);
+          setSimulatedCompletedSteps(1);
+        }, 800),
+        setTimeout(() => {
+          setSimulatedProgress(50);
+          setSimulatedCompletedSteps(2);
+        }, 1800),
+        setTimeout(() => {
+          setSimulatedProgress(75);
+          setSimulatedCompletedSteps(3);
+        }, 2800),
+        setTimeout(() => {
+          setSimulatedProgress(100);
+          setSimulatedCompletedSteps(4);
+        }, 3800),
+      ];
+      return () => timers.forEach(clearTimeout);
+    } else {
+      const timers = [
+        setTimeout(() => {
+          setSimulatedProgress(20);
+          setSimulatedCompletedSteps(1);
+        }, 1400),
+        setTimeout(() => {
+          setSimulatedProgress(40);
+          setSimulatedCompletedSteps(2);
+        }, 2800),
+        setTimeout(() => {
+          setSimulatedProgress(65);
+          setSimulatedCompletedSteps(3);
+        }, 4200),
+        setTimeout(() => {
+          setSimulatedProgress(85);
+          setSimulatedCompletedSteps(4);
+        }, 5600),
+        setTimeout(() => {
+          setSimulatedProgress(100);
+          setSimulatedCompletedSteps(5);
+        }, 7000),
+      ];
+      return () => timers.forEach(clearTimeout);
+    }
+  }, [progressState, isText]);
 
   // Smooth animation logic for progress and step indices
   useEffect(() => {
     const errorMsg = progressState?.error || null;
     if (errorMsg) return; // Do not animate further if there is an error
 
-    const targetProgress = progressState && !progressState.isFallback && progressState.progress !== undefined
-      ? progressState.progress
-      : simulatedProgress;
+    const targetProgress =
+      progressState &&
+      !progressState.isFallback &&
+      progressState.progress !== undefined
+        ? progressState.progress
+        : simulatedProgress;
 
     // Determine the backend target step index
     let targetStepIndex = 0;
     if (progressState && !progressState.isFallback) {
       if (progressState.status === "completed") {
-        targetStepIndex = 5;
+        targetStepIndex = totalSteps;
       } else if (progressState.currentStep) {
-        const stepKeys = ["upload", "ocr", "identify", "health", "report"];
+        const stepKeys = isText
+          ? ["parse", "identify", "health", "report"]
+          : ["upload", "ocr", "identify", "health", "report"];
         targetStepIndex = stepKeys.indexOf(progressState.currentStep);
         if (targetStepIndex === -1) targetStepIndex = 0;
       }
@@ -126,14 +177,17 @@ export default function AnalysisProgressOverlay({
       const now = Date.now();
       const elapsed = now - lastStepUpdate;
 
-      if (renderedStepIndex < targetStepIndex && (elapsed >= MIN_STEP_DURATION || renderedStepIndex === 0)) {
+      if (
+        renderedStepIndex < targetStepIndex &&
+        (elapsed >= MIN_STEP_DURATION || renderedStepIndex === 0)
+      ) {
         nextStepIndex = renderedStepIndex + 1;
         setRenderedStepIndex(nextStepIndex);
         setLastStepUpdate(now);
       }
 
       // 3. If everything is complete, trigger the complete callback
-      if (nextProgress === 100 && nextStepIndex === 5) {
+      if (nextProgress === 100 && nextStepIndex === totalSteps) {
         clearInterval(interval);
         onAnimationComplete?.();
       }
@@ -147,6 +201,8 @@ export default function AnalysisProgressOverlay({
     renderedProgress,
     renderedStepIndex,
     lastStepUpdate,
+    totalSteps,
+    isText,
     onAnimationComplete,
   ]);
 
@@ -169,11 +225,13 @@ export default function AnalysisProgressOverlay({
 
           <div className="min-w-0 flex-1 pt-0.5">
             <h2 className="text-[18px] font-bold leading-tight text-[#171717]">
-              Analyzing your food label
+              {isText ? "Analyzing ingredient text" : "Analyzing your food label"}
             </h2>
 
             <p className="mt-1 text-[13px] leading-5 text-[#5F6368]">
-              We're checking what's inside your product
+              {isText
+                ? "Checking ingredients against scientific databases"
+                : "We're checking what's inside your product"}
             </p>
           </div>
 
@@ -189,10 +247,11 @@ export default function AnalysisProgressOverlay({
 
         {/* Steps */}
         <div className="px-3">
-          {steps.map((step, index) => {
-            const stepKey = ["upload", "ocr", "identify", "health", "report"][
-              index
-            ];
+          {activeSteps.map((step, index) => {
+            const stepKeys = isText
+              ? ["parse", "identify", "health", "report"]
+              : ["upload", "ocr", "identify", "health", "report"];
+            const stepKey = stepKeys[index];
 
             let completed = index < renderedStepIndex;
             let active = index === renderedStepIndex;
@@ -200,7 +259,7 @@ export default function AnalysisProgressOverlay({
 
             if (progressState && errorMsg) {
               const targetFailedIndex = progressState.currentStep
-                ? ["upload", "ocr", "identify", "health", "report"].indexOf(progressState.currentStep)
+                ? stepKeys.indexOf(progressState.currentStep)
                 : -1;
               if (index === targetFailedIndex) {
                 failed = true;
@@ -217,7 +276,7 @@ export default function AnalysisProgressOverlay({
             return (
               <div key={step.title} className="relative flex gap-5">
                 {/* Connector */}
-                {index !== steps.length - 1 && (
+                {index !== activeSteps.length - 1 && (
                   <div className="absolute left-[13px] top-[27px] h-[44px] w-[2px] bg-[#E3E5E8]">
                     <div
                       className="

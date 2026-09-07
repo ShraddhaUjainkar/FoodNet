@@ -22,7 +22,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import Header from "@/components/Header";
-import { getOrCreateGuestId } from "@/lib/guest";
+import { getOrCreateGuestId, migrateGuestScansIfAny } from "@/lib/guest";
 import { syncUserToDatabase } from "@/lib/user";
 
 const GoogleIcon = () => (
@@ -70,18 +70,33 @@ export default function ProfilePage() {
     const currentGuestId = getOrCreateGuestId();
     setGuestId(currentGuestId);
 
-    async function fetchScans() {
+    // Clean up any stale localStorage key
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("foodnet_stable_user_id");
+    }
+
+    async function loadProfileData() {
       const API_URL = (
         process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
       ).replace(/\/$/, "");
 
       try {
+        if (session?.user) {
+          const activeUserId = session.user.id || session.user.email || "";
+          if (activeUserId) {
+            await migrateGuestScansIfAny(activeUserId);
+            syncUserToDatabase(session.user);
+          }
+        }
+
         const headers: Record<string, string> = {};
 
-        if (session?.user?.id) {
-          headers["x-user-id"] = session.user.id;
-        } else if (session?.user?.email) {
-          headers["x-user-id"] = session.user.email;
+        if (session?.user) {
+          if (session.user.id) {
+            headers["x-user-id"] = session.user.id;
+          } else if (session.user.email) {
+            headers["x-user-id"] = session.user.email;
+          }
         } else if (currentGuestId) {
           // Guest mode: fetch scans associated with this guest ID
           headers["x-guest-id"] = currentGuestId;
@@ -100,10 +115,7 @@ export default function ProfilePage() {
     }
 
     if (status !== "loading") {
-      fetchScans();
-      if (session?.user) {
-        syncUserToDatabase(session.user);
-      }
+      loadProfileData();
     }
   }, [session, status]);
 
